@@ -57,7 +57,8 @@
 
 /* Keep the same artwork/border/idle motion, with a safe mobile resting place. */
 @media(min-width:901px) and (max-width:1180px){.calendar-mascot{width:75px;right:-44px}}
-@media(min-width:721px) and (max-width:900px){.calendar-mascot{width:40px;right:-8px}}
+/* Leave room for the rotated white border and a classic viewport scrollbar. */
+@media(min-width:721px) and (max-width:900px){.calendar-mascot{width:36px;right:-4px}}
 .fullscreen .calendar-mascot{width:40px;right:-6px;top:32px}
 /* All six date rows need their own space, including the outside-month dates. */
 @media(min-width:721px){
