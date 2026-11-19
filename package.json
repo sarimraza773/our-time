@@ -1,0 +1,36 @@
+{
+  "name": "deena-sarim-calendar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build && node scripts/verify-pages-build.mjs",
+    "check:pages": "node scripts/verify-pages-build.mjs",
+    "prepare:github": "node scripts/prepare-github-source.mjs",
+    "preview:pages": "node scripts/preview-pages.mjs",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@openai/sites-vite-plugin": "^0.2.0",
+    "@supabase/supabase-js": "^2.117.2",
+    "framer-motion": "^12.23.12",
+    "luxon": "^3.7.2",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@testing-library/react": "^16.3.3",
+    "@types/luxon": "^3.7.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "jsdom": "^30.1.1",
+    "typescript": "5.9.3",
+    "vite": "^8.3.1",
+    "vitest": "^3.2.4"
+  }
+}
