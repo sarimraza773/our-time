@@ -117,4 +117,9 @@ The workflow installs dependencies from the lockfile, runs all tests, validates 
 
 ## November 22 calendar and private tracker update
 
-See [PERIOD_TRACKER.md](PERIOD_TRACKER.md) for model limitations, the two new additive migrations, their exact review/application workflow and the hosted privacy/viewport acceptance checklist. November 21 is already applied: do not replay it or repair history for this update. The tracker is private to the authenticated Deena profile through RLS, and no health records belong in a source export. Source push, Pages deployment and production migrations still require explicit approval.
+See [PERIOD_TRACKER.md](PERIOD_TRACKER.md) for model limitations, the additive tracker migrations, their exact review/application workflow and the hosted privacy/viewport acceptance checklist. November 21 is already applied: do not replay it or repair history for this update. The tracker is restricted through RLS to Deena and her linked Sarim account, with both editing the same Deena-owned records, and no health records belong in a source export. Source push, Pages deployment and production migrations still require explicit approval.
+
+
+## Shared tracker and sticker follow-up
+
+The tracker entry is available to both authenticated linked profiles. Apply the reviewed `202611220003_shared_period_tracker.sql` after its tracker prerequisites, only with production migration approval. This replaces the prior owner-only policy with the explicitly requested two-account editing model. No unrelated account can access the records. See PERIOD_TRACKER.md for safe CLI history/dry-run checks. The top sticker wrappers now preserve the same paper blending as the lower pair without changing any artwork files.

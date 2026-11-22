@@ -1,29 +1,38 @@
-# Calendar fixes and private Period Tracker
+# Period Tracker — shared by Deena and Sarim
 
-This update uses the existing recurrence engine, calendar repository, authenticated profiles and Supabase client. The new tracker is available only to the authenticated profile with `person_key = 'deena'`; the visual calendar perspective does not authorize access. It has no sharing switch, shared-calendar event export, analytics, health-data localStorage cache, or shared Realtime broadcast.
+Both authenticated, linked accounts can now view and edit **Deena’s same tracker**, as explicitly requested. Sarim does not get a separate tracker. The calendar’s visual perspective is not an authorization mechanism. No hardcoded account UUID, email or credentials are added to the frontend.
 
-## Model and privacy
+## Access and data ownership
 
-- Dates are SQL `date` and `YYYY-MM-DD` strings. Date arithmetic uses UTC as a fixed calculation zone; Today follows the planner's Kuala Lumpur timezone. No date-only value is converted through JavaScript `Date`.
-- Cycle day 1 is a recorded start. Closed historical bleeding dates always win over forecasts. Open entries remain ongoing until ended; overlapping records are rejected, including concurrent writes serialized per owner.
-- Initial suggestions are 28/5/14 days (cycle/period/luteal estimate), not personal measurements. Default history mode withholds a forecast until there are three recorded starts (two intervals). Manual mode is an explicit option.
-- History uses the median of the most recent six recorded intervals. Variation over seven days adds an uncertainty message. These are product heuristics, not validated medical thresholds.
-- Ovulation is estimated from the next forecast minus the configurable luteal estimate, with a three-day display window. This is **not a validated fertile window**. Incompatible boundaries produce uncertainty instead of forced phases. The displayed post-bleeding follicular segment is part of the larger biological follicular phase.
-- A passed/missed prediction never generates a period or silently rolls cycle day back to 1. Actual early/late starts reanchor predictions. Overrides carry the latest recorded-start anchor; stale overrides are ignored after that anchor changes. Reset removes only prediction adjustments. Deleting actual records can recalculate estimates.
-- Estimates cannot confirm ovulation, biological phase, pregnancy or safe contraceptive days. [NHS cycle information](https://www.nhs.uk/conditions/periods/fertility-in-the-menstrual-cycle/) explains why ovulation timing cannot be pinpointed from calendar dates alone.
-- RLS on `period_entries` and `cycle_settings` requires BOTH `auth.uid() = user_id` and the existing administrator-managed Deena profile. Clients cannot change their profile mapping. Sarim and unrelated authenticated accounts cannot read or mutate either table even when they specify Deena's UUID. Anonymous privileges are revoked.
-- `delete_my_cycle_data()` deletes only the caller's private records/settings in one transaction, after UI confirmation. Updates and individual deletions compare server timestamps to reject stale writes. API errors are translated without displaying database details. Tracker data is refetched on reopen, focus, visibility restoration, reconnect and save; no health data is broadcast on shared topics.
+- `cycle_tracker_owner_id()` resolves Deena’s UUID on the server. Deena can access her own records. Sarim must have his administrator-managed `sarim` profile **and** share the existing calendar membership with Deena. An unrelated authenticated user receives no owner identity and cannot access records.
+- Both clients read/write `period_entries` and `cycle_settings` under that resolved Deena owner. RLS applies to every direct SELECT, INSERT, UPDATE and DELETE, including requests that supply another UUID. A separate Sarim-owned tracker cannot be created through these policies.
+- The new `delete_cycle_tracker_data()` RPC deletes this one tracker atomically after UI confirmation. Both linked editors may remove individual records or all tracker data. It accepts no target UUID. Existing date, overlap, identity and stale-write protections remain.
+- Removing Sarim’s calendar link removes his tracker access. Owner resolution and RLS enforce that on subsequent requests; the UI clears cached data if access refresh fails. There is no public/anonymous access, shared-calendar export, health-data analytics, browser health-data cache or shared Realtime broadcast.
+- Both users’ edits are saved in Supabase. The tracker refetches on open, focus, reconnect, visibility restoration and save. Concurrent stale edits are rejected through server timestamps; no health payload is broadcast to the calendar’s shared topics.
 
-## New migrations — review before applying
+## Dates and estimation
 
-1. `202611220001_custom_event_colors.sql` extends existing calendar/rule/occurrence color constraints to permit six-digit hex values, retaining the six legacy presets and all existing records.
-2. `202611220002_private_period_tracker.sql` adds the two private tables, owner-mapping helper, validation/serialization triggers, RLS, grants and self-only deletion RPC.
+SQL `date` columns and `YYYY-MM-DD` strings preserve date-only information. Arithmetic uses a fixed UTC calculation zone; Today follows the planner’s Kuala Lumpur timezone. Cycle day 1 is the actual recorded start. Confirmed historical bleeding takes priority over predictions, and an ongoing entry stays open until an end is recorded.
 
-The already-applied `202611210001_event_colors_and_repeats.sql` is unchanged. Do not replay it, reset the database, recreate accounts, generate account-link SQL or repair history as part of this update.
+Initial suggestions are a 28-day cycle, five-day period and 14-day luteal estimate, clearly labeled as defaults rather than personal measurements. History mode withholds a forecast until three period starts exist. Manual mode is explicit. History uses the median of the latest six intervals; a range over seven days adds uncertainty. Those are product heuristics, not validated medical thresholds. A blank optional luteal input uses the stated 14-day suggestion.
 
-## Safe Supabase CLI application — only after approval
+The displayed ovulation window is a three-day calendar estimate around the next forecast minus the configured luteal estimate, **not a validated fertile window**. Incompatible boundaries remain uncertain. The displayed post-bleeding follicular segment is part of the broader biological follicular phase. A passed/missed forecast does not log bleeding or reset cycle day. New actual starts reanchor predictions; stale forecast overrides are ignored. Resetting an override never changes actual history.
 
-Use the **existing linked combined working copy** that retains its private local migration history. Do not run migration commands from a sanitized public export: it intentionally excludes account-link migrations. Use the previously approved project reference from the local setup; do not paste account identifiers or credentials into public files.
+Calendar estimates cannot confirm ovulation, pregnancy, biological phase or safe contraceptive days. See [NHS cycle information](https://www.nhs.uk/conditions/periods/fertility-in-the-menstrual-cycle/).
+
+## Additive migrations
+
+| Version | Purpose |
+| --- | --- |
+| `202611220001_custom_event_colors.sql` | Extends existing color constraints to include hex values. |
+| `202611220002_private_period_tracker.sql` | Creates the original tables, date validation and owner-only policies. |
+| `202611220003_shared_period_tracker.sql` | Resolves the common owner and replaces owner-only policies with linked Deena/Sarim editor access; adds shared-tracker deletion RPC. |
+
+All previous migration files are unchanged. Version `003` does not copy, delete, rewrite or change ownership of existing records. Its access policy intentionally supersedes version `002` following the explicit request to let both accounts edit. Do not edit or replay version `002` instead of applying version `003`.
+
+## Safe existing-project Supabase CLI workflow
+
+Use the **existing linked combined working copy**, which retains private local migration history. A sanitized public source export deliberately excludes account-link migrations and must not be used as the history authority.
 
 ```powershell
 Set-Location '<existing-combined-working-copy>'
@@ -31,9 +40,9 @@ npx.cmd --yes supabase@2 migration list --linked
 npx.cmd --yes supabase@2 db push --linked --dry-run
 ```
 
-The dry-run must show **only** the two November 22 migrations above, in that order. Confirm November 21 already appears applied. If old migrations appear pending, or the linked project is wrong/missing, stop and inspect the existing configuration/history. Do not repair history or use `--include-all`, `db reset`, seeds, roles or account provisioning. If linking is actually missing, verify the intended existing project in the dashboard, then use `npx.cmd --yes supabase@2 link --project-ref <approved-existing-project-ref>`; linking alone does not apply SQL.
+Review the linked project and exact pending list. The only expected application migrations for this feature are the unapplied members of `202611220001`, `202611220002`, `202611220003`, in that order. If the first two were already applied, only `202611220003` should be pending. November 21 is already applied and must not be replayed. If older/unexpected versions appear, stop without using `migration repair`, `--include-all`, resets, seeds, roles or account provisioning.
 
-Review the SQL and take/confirm an approved recovery checkpoint. After explicit approval of these two migrations only:
+Review the actual SQL and take/confirm the existing approved recovery checkpoint. **Only after explicit approval to apply those pending migrations to production:**
 
 ```powershell
 npx.cmd --yes supabase@2 db push --linked
@@ -41,11 +50,9 @@ npx.cmd --yes supabase@2 migration list --linked
 npx.cmd --yes supabase@2 db push --linked --dry-run
 ```
 
-The final dry-run should show no pending migrations. Never also paste the migrations into the SQL editor. No remote CLI command or database mutation was performed for this update. See [Supabase migration guidance](https://supabase.com/docs/guides/deployment/database-migrations) and [CLI reference](https://supabase.com/docs/reference/cli/introduction).
+The last dry-run should show no pending migrations. Do not also paste the files into the SQL editor. The GitHub Pages workflow never applies SQL. This source update does not claim production schema application. See [Supabase migration guidance](https://supabase.com/docs/guides/deployment/database-migrations).
 
-## Source review and GitHub Pages — only after approval
-
-From the combined working copy:
+## Source and Pages
 
 ```powershell
 npm.cmd test
@@ -53,18 +60,14 @@ npm.cmd run build
 npm.cmd run prepare:github
 ```
 
-Review the newly printed `outputs/github-pages-source-...` folder. It includes these public-safe schemas and tracker source/docs; it excludes local environment files, actual health records, private account-link SQL, QA fixtures, prior exports and credentials. Do not copy the parent working directory wholesale into the public repository. Use a clean review branch of the existing `sarimraza773/our-time` repository, copy only this reviewed export over its application files (preserving `.git`), and inspect `git diff --stat` and the full diff. Run `node scripts/check-public-source.mjs` after staging only reviewed source, then the tests/build. Never stage `.env.local` or local Supabase metadata. Commit/push only after explicit source publication approval.
+Review/copy only the allowlisted export into the existing public repository. Never include `.env.local`, Supabase local metadata, actual health records, account-link SQL, QA screenshots or generated test fixtures. Public-source guards and the Pages build check exclude those boundaries. Existing assets and `/our-time/` routing remain unchanged; the manual GitHub Actions workflow tests, builds and uploads only the static artifact.
 
-The workflow stays manual-only (`workflow_dispatch`), retains `/our-time/` asset routing and never applies migrations. After the approved schema application and hosted privacy checks, request deployment approval, then run **Actions → Test, build and deploy Our Time to Pages → Run workflow → main**. Confirm the tested commit is the intended update and the workflow succeeds. Open the canonical URL, reload once, and verify its loaded hashed JS/CSS assets belong to that workflow artifact; changed local code alone does not update Pages. `npm run check:pages` now requires recurrence/color/tracker/24-hour control labels in the production bundle and excludes the synthetic QA fixture.
+After source publication/deployment approval, run **Actions → Test, build and deploy Our Time to Pages → Run workflow → main** and verify the intended commit and successful run. The tracker button is visible to both linked profiles; storage/shared editing requires the migrations above. Schema application is separate from frontend publication.
 
-## Acceptance still required before calling the release verified
+## Acceptance and current limits
 
-- Visually inspect 320, 390, 768, 1024 and 1440px, including sticker/button spacing, the expanded scrollable event form and tracker forms/month calendar. Use actual browser layouts; DOM tests do not prove geometry.
-- Create disposable 1–6 AM, 2:30 AM, 11:59 PM and 10:30 PM–6 AM events. Scroll to midnight and the final hour, check both halves of overnight events, and click each of three overlapping cards. Check preset/custom/automatic colors, dark-fill text, recurrence edits/deletions and both users' saved colors.
-- In approved hosted test sessions, Deena logs/ends/corrects/deletes a disposable period and reloads/signs in again. Test early/missed/manual/reset predictions. Use synthetic records or approved disposable data, never publish real health records as evidence.
-- Using Sarim's real authenticated SDK/REST session, directly query both new tables filtered by Deena's user ID: return zero rows. Direct inserts with Sarim's own or Deena's identity must fail RLS; update/delete must affect zero rows. Anonymous access must fail. Repeat with an authorized disposable third account if available. Do not use a service-role key for this test, since it bypasses RLS.
-- Confirm existing shared calendar Realtime, diary, bookshelf and private photos still work. Test intended physical devices and touch/keyboard behavior. Local embedded PostgreSQL and simulated SDK/UI tests do not establish hosted Auth, PostgREST, WebSocket or hardware behavior.
+Automated checks execute the old private policies separately, then all migrations together in embedded PostgreSQL to verify the final shared policy. The final tests cover both linked users’ owner resolution and CRUD, cross-account visibility, deletion, outsider/anonymous denial, removed membership, attempted separate ownership/profile spoofing, preserved date/overlap validation and no shared snapshot/broadcast disclosure. SDK/UI tests check server-resolved ownership and Sarim saves under Deena’s owner identity. These do not establish hosted PostgREST or live sessions.
 
-Browser QA was attempted but unavailable in this session: the local preview timed out, and Windows Computer Use stopped because it could not confidently determine the current browser URL. No viewport, live two-account or physical-device success is claimed. The hosted asset version also could not be verified; the public repository source already had Repeat/Color/24-hour code before this change, so an older deployed artifact remains a hypothesis, not a proven diagnosis.
+Manually verify both real authenticated accounts after approved migration application: log a disposable period as one, reopen/refresh as the other, correct dates/settings/overrides and confirm both see the same saved data. Direct unrelated/anonymous API requests must be denied. Test membership removal only in an approved disposable environment; do not remove the live couple’s link as a test.
 
-The preserved parent repository's committed `DailyTimeline.tsx` uses `START_HOUR = 6` and `END_HOUR = 25`; its committed event editor has neither Repeat nor Color controls. Those older committed sources match the screenshot symptoms. The combined working copy and the fetched public `main` editor already contained the newer controls. This is concrete evidence of differing source generations, while the exact hosted bundle remains unverified.
+Visual browser checks at 320/390/768/1024/1440px and physical-device interactions remain pending. The two top sticker wrappers now let their shared multiply effect blend with the cream paper, like the bottom pair, rather than isolate it against transparent layers. Artwork bytes and the existing border, shadow and animation are preserved. Check all four stickers and the adjacent button in normal/focus/mobile layouts.

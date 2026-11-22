@@ -69,7 +69,7 @@
 
 /* The blue mascot lives outside the paper, away from month controls. */
 .sticker-decorative{pointer-events:none;user-select:none}
-.calendar-mascot{position:absolute;z-index:7;top:64px;right:-48px;width:86px;pointer-events:none}
+.calendar-mascot{position:absolute;z-index:auto;top:64px;right:-48px;width:86px;pointer-events:none}
 .calendar-wrap .calendar-mascot>.sticker-rupert{position:relative;display:block;inset:auto;width:100%}
 
 /* Fullscreen cinematic state */
@@ -154,9 +154,12 @@
 @media(min-width:721px){.calendar-paper,.fullscreen .calendar-paper{display:flex;flex-direction:column}.calendar-header,.date-row{flex:none}.planner-grid,.fullscreen .planner-grid{flex:1;min-height:0;height:auto}}
 
 /* Keep the private entry physically beside the Relax sticker at every size. */
-.calendar-personal-tools{--relax-sticker-size:86px;position:relative;z-index:8;display:flex;align-items:center;gap:16px;flex:none;min-height:var(--relax-sticker-size);margin:-24px 0 10px -31px}
+.calendar-personal-tools{--relax-sticker-size:86px;position:relative;z-index:auto;display:flex;align-items:center;gap:16px;flex:none;min-height:var(--relax-sticker-size);margin:-24px 0 10px -31px}
 .calendar-personal-tools>.sticker-sammy{position:relative;inset:auto;display:block;flex:0 0 auto;width:var(--relax-sticker-size)}
-.period-entry{position:static;flex:none;max-width:160px;min-height:44px;border-radius:22px;padding:8px 12px;background:#f9dbe5;font-size:14px;white-space:nowrap}
+.period-entry{position:relative;z-index:8;flex:none;max-width:160px;min-height:44px;border-radius:22px;padding:8px 12px;background:#f9dbe5;font-size:14px;white-space:nowrap}
 @media(max-width:1180px) and (min-width:721px){.calendar-personal-tools{--relax-sticker-size:75px;margin-left:-23px}}
 .fullscreen .calendar-personal-tools{margin-top:-9px;margin-left:-10px}
 @media(max-width:720px){.calendar-personal-tools,.fullscreen .calendar-personal-tools{--relax-sticker-size:59px;margin:-16px 0 14px;gap:16px}}
+
+/* The upper sticker wrappers must not isolate multiply blending. Like the
+   lower pair, their white artwork and borders blend into the cream paper. */

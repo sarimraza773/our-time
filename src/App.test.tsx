@@ -143,9 +143,9 @@ describe('existing UI with the cloud hook boundary mocked', () => {
     expect(controls.cloud.saveEvent).not.toHaveBeenCalled();
   });
 
-  it('shows the private tracker entry only for the authenticated Deena profile, not the perspective', () => {
+  it('shows the tracker for both authenticated linked profiles, not an unknown perspective', () => {
     const view = render(<App />);
-    expect(screen.queryByRole('button', {name: '✿ Period Tracker'})).toBeNull();
+    expect(screen.getByRole('button', {name: '✿ Period Tracker'})).toBeTruthy();
     controls.auth.session = {user: {id: users.deena}}; view.rerender(<App />);
     expect(screen.getByRole('button', {name: '✿ Period Tracker'})).toBeTruthy();
     controls.auth.session = {user: {id: 'unknown-user'}}; view.rerender(<App />);

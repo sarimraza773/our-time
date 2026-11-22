@@ -7,7 +7,7 @@ export type CycleSettings = {
   override_anchor: string | null; missed_prediction_on: string | null; updated_at: string;
 };
 export type PeriodDraft = Pick<PeriodEntry, 'id' | 'start_date' | 'end_date' | 'notes'>;
-export type CycleSnapshot = { entries: PeriodEntry[]; settings: CycleSettings | null };
+export type CycleSnapshot = { ownerUserId: string; entries: PeriodEntry[]; settings: CycleSettings | null };
 export const DEFAULT_CYCLE = { cycle_length: 28, period_duration: 5, luteal_length: 14, estimate_mode: 'history' as const,
   expected_next_date: null, override_anchor: null, missed_prediction_on: null };
 export const PHASES = {

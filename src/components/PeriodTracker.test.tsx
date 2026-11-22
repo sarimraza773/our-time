@@ -5,27 +5,27 @@ import { PeriodTracker } from './PeriodTracker';
 import { CycleAccessError, type PeriodRepository } from '../data/periodRepository';
 import { DEFAULT_CYCLE, type CycleSnapshot } from '../lib/period';
 const today = '2026-03-20';
-function fixture(initial: CycleSnapshot = { entries: [], settings: null }) {
-  let data = structuredClone(initial), version = 0;
+function fixture(initial: Omit<CycleSnapshot, 'ownerUserId'> = { entries: [], settings: null }) {
+  let data: CycleSnapshot = { ...structuredClone(initial), ownerUserId: 'synthetic-owner' }; let version = 0;
   const repository: PeriodRepository = {
     load: vi.fn(async () => structuredClone(data)),
     saveEntry: vi.fn(async (user, draft) => { data.entries = [...data.entries.filter(e => e.id !== draft.id),{...draft,user_id:user,updated_at:String(++version)}]; }),
     saveSettings: vi.fn(async (user, value) => { data.settings = {...value,user_id:user,updated_at:String(++version)}; }),
     deleteEntry: vi.fn(async (_user, entry) => { data.entries = data.entries.filter(e => e.id !== entry.id); }),
-    deleteAll: vi.fn(async () => { data = {entries:[],settings:null}; }),
+    deleteAll: vi.fn(async () => { data = {ownerUserId:'synthetic-owner',entries:[],settings:null}; }),
   };
-  const show = () => render(<PeriodTracker repository={repository} userId="synthetic-owner" today={today} onClose={() => {}} />);
+  const show = (viewer = "synthetic-owner") => render(<PeriodTracker repository={repository} userId={viewer} today={today} onClose={() => {}} />);
   return {repository,show};
 }
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 describe('private cycle journal interactions with simulated persistence', () => {
   it('handles first-time logging, ending, editing and remount persistence', async () => {
-    const {show,repository}=fixture(); const view=show(); await screen.findByText('No periods logged yet. Your dates stay private.');
+    const {show,repository}=fixture(); const view=show(); await screen.findByText('No periods logged yet. Only your two linked accounts can access these dates.');
     fireEvent.click(screen.getByRole('button',{name:'＋ Log Period'}));
     fireEvent.change(screen.getByLabelText('Period start date'),{target:{value:'2026-03-18'}});
     fireEvent.change(screen.getByLabelText('Notes (optional)'),{target:{value:'Synthetic note'}});
     fireEvent.click(screen.getByRole('button',{name:'Save period'}));
-    await screen.findByText('Saved privately to your account.'); expect(repository.saveEntry).toHaveBeenCalledOnce();
+    await screen.findByText('Saved to Deena’s tracker.'); expect(repository.saveEntry).toHaveBeenCalledOnce();
     expect(screen.getByText('Cycle day 3')).toBeTruthy(); expect(screen.getByText('Ongoing — end not recorded')).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'Mark ended / Edit'}));
     fireEvent.change(screen.getByLabelText('Period end date (optional)'),{target:{value:'2026-03-20'}}); fireEvent.click(screen.getByRole('button',{name:'Save period'}));
@@ -53,8 +53,8 @@ describe('private cycle journal interactions with simulated persistence', () => 
     fireEvent.click(screen.getByRole('button',{name:'Next cycle month'})); expect(screen.getByRole('heading',{name:'April 2026'})).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:/2026-04-02,.*estimated/})); expect(screen.getByText(/Future \/ predicted/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'Remove'})); expect(repository.deleteEntry).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button',{name:'Keep data'})); fireEvent.click(screen.getByRole('button',{name:'Delete all my cycle data'}));
-    fireEvent.click(screen.getByRole('button',{name:'Confirm deletion'})); await screen.findByText('No periods logged yet. Your dates stay private.'); expect(repository.deleteAll).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button',{name:'Keep data'})); fireEvent.click(screen.getByRole('button',{name:'Delete all tracker data'}));
+    fireEvent.click(screen.getByRole('button',{name:'Confirm deletion'})); await screen.findByText('No periods logged yet. Only your two linked accounts can access these dates.'); expect(repository.deleteAll).toHaveBeenCalledOnce();
   });
   it('marks a missed forecast without recording bleeding and permits a later override', async () => {
     const {show,repository}=fixture({entries:[{id:'one',user_id:'synthetic-owner',start_date:'2026-02-01',end_date:'2026-02-05',notes:'',updated_at:'v1'}],settings:{...DEFAULT_CYCLE,estimate_mode:'manual',user_id:'synthetic-owner',updated_at:'v1'}});
@@ -63,10 +63,18 @@ describe('private cycle journal interactions with simulated persistence', () => 
     await waitFor(() => expect(repository.saveSettings).toHaveBeenCalledWith('synthetic-owner',expect.objectContaining({missed_prediction_on:'2026-03-01'}),expect.anything()));
     expect(repository.saveEntry).not.toHaveBeenCalled();
   });
+  it('lets Sarim save into Deena’s shared tracker and explains both-account access', async () => {
+    const {show,repository}=fixture();show('synthetic-sarim');
+    await screen.findByRole('button',{name:'＋ Log Period'});
+    expect(screen.getByText(/Both linked accounts can view and edit/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'＋ Log Period'}));fireEvent.click(screen.getByRole('button',{name:'Save period'}));
+    await screen.findByText('Saved to Deena’s tracker.');
+    expect(repository.saveEntry).toHaveBeenCalledWith('synthetic-owner',expect.anything(),expect.anything(),undefined);
+  });
   it('clears data when access is denied on refresh and offers a retry for connection errors', async () => {
     const {show,repository}=fixture(); show(); await screen.findByRole('button',{name:'Cycle settings'});
     vi.mocked(repository.load).mockRejectedValueOnce(new CycleAccessError('Private access denied'));
-    fireEvent.click(screen.getByRole('button',{name:'Refresh private journal'})); await screen.findByText('Private access denied');
+    fireEvent.click(screen.getByRole('button',{name:'Refresh tracker'})); await screen.findByText('Private access denied');
     expect(screen.queryByRole('button',{name:'＋ Log Period'})).toBeNull();
   });
   it('retains an unsaved period draft when a write fails', async () => {

@@ -46,7 +46,8 @@ function SharedPlanner({ authenticatedUserId, onSignOut, authError }: { authenti
   const memoryRepository = useMemo(() => supabase ? createMemoryRepository(supabase) : null, []);
   // Visual perspective is independent from the authenticated UUID and profile.
   const selectedPerspective: OwnerId = 'deena';
-  const trackerAllowed = cloud.snapshot?.profiles.find(p => p.id === authenticatedUserId)?.person_key === 'deena';
+  const trackerProfile = cloud.snapshot?.profiles.find(p => p.id === authenticatedUserId);
+  const trackerAllowed = trackerProfile?.person_key === 'deena' || trackerProfile?.person_key === 'sarim';
   const person = cloud.snapshot?.profiles.find(p => p.id === authenticatedUserId)?.person_key ?? 'deena';
   const nowUtc = useCurrentTime();
   const today = nowUtc.setZone(DEENA_TIMEZONE).startOf('day');

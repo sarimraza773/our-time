@@ -47,6 +47,8 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      cycle_tracker_owner_id: { Args: Record<string, never>; Returns: string | null };
+      delete_cycle_tracker_data: { Args: Record<string, never>; Returns: undefined };
       is_private_cycle_owner: { Args: Record<string, never>; Returns: boolean };
       delete_my_cycle_data: { Args: Record<string, never>; Returns: undefined };
       load_shared_journal: { Args: { p_calendar_id: string }; Returns: Json };

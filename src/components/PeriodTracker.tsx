@@ -61,14 +61,14 @@ export function PeriodTracker({ repository, userId, onClose, today = cycleToday(
       missed_prediction_on: model.overrideActive ? missed_prediction_on : null });
     setDirty(false); setNotice(''); setPanel(view);
   };
-  const saved = () => { setPanel(null); setDraft(null); setDirty(false); setNotice('Saved privately to your account.'); };
+  const saved = () => { setPanel(null); setDraft(null); setDirty(false); setNotice('Saved to Deena’s tracker.'); };
   const savePeriod = async (e: FormEvent) => {
     e.preventDefault(); if (!draft || !snapshot) return;
-    if (await tracker.mutate(() => repository.saveEntry(userId, draft, snapshot.entries, original))) saved();
+    if (await tracker.mutate(() => repository.saveEntry(snapshot.ownerUserId, draft, snapshot.entries, original))) saved();
   };
   const saveSettings = async (e: FormEvent) => {
     e.preventDefault(); if (!snapshot) return;
-    if (await tracker.mutate(() => repository.saveSettings(userId, settings, snapshot.settings))) saved();
+    if (await tracker.mutate(() => repository.saveSettings(snapshot.ownerUserId, settings, snapshot.settings))) saved();
   };
   const changePeriod = (patch: Partial<PeriodDraft>) => { if (draft) { setDraft({ ...draft, ...patch }); setDirty(true); } };
   const changeSettings = (patch: Partial<SettingsDraft>) => { setSettings({ ...settings, ...patch }); setDirty(true); };
@@ -79,10 +79,10 @@ export function PeriodTracker({ repository, userId, onClose, today = cycleToday(
   const currentName = current.phase ? PHASES[current.phase].label : 'Not enough information';
   return <div className="cycle-backdrop" onMouseDown={e => { if (e.currentTarget === e.target) closeRef.current(); }}>
     <section className="cycle-book" role="dialog" aria-modal="true" aria-labelledby="cycle-title" ref={root}>
-      <header className="cycle-header"><div><p className="eyebrow">✿ A little space for yourself</p><h2 id="cycle-title">Period Tracker</h2><p>Deena’s private cycle journal</p></div>
+      <header className="cycle-header"><div><p className="eyebrow">✿ A little space for yourself</p><h2 id="cycle-title">Period Tracker</h2><p>Deena’s cycle journal</p></div>
         <button ref={close} className="cycle-close" aria-label="Close Period Tracker" disabled={saving} onClick={() => closeRef.current()}>×</button></header>
-      <p className="cycle-privacy">♧ Only you can access this journal. Nothing is added to your shared calendar.</p>
-      {loading && <p role="status">Opening your private journal…</p>}
+      <p className="cycle-privacy">♧ Shared with Deena and Sarim. Both linked accounts can view and edit; nothing is added to your shared calendar.</p>
+      {loading && <p role="status">Opening Deena’s journal…</p>}
       {error && <div className="cycle-error" role="alert"><p>{error}</p><button className="paper-button" disabled={saving} onClick={() => { void tracker.refresh(); }}>Retry / Refresh</button></div>}
       {snapshot && !denied && <>
         <div className="cycle-toolbar"><button className="paper-button primary" disabled={saving} onClick={() => beginLog()}>＋ Log Period</button><button className="paper-button" disabled={saving} onClick={() => beginSettings('adjust')}>Adjust Cycle / Override</button><button className="paper-button" disabled={saving} onClick={() => beginSettings('settings')}>Cycle settings</button></div>
@@ -136,16 +136,16 @@ export function PeriodTracker({ repository, userId, onClose, today = cycleToday(
           })}</div><p className="cycle-muted">Solid border: recorded bleeding · Dashed border: estimated phase · ✎ Manual forecast adjustment</p>
           <article className="cycle-inspection" aria-live="polite"><h4>{prettyDate(selected)}</h4><p>{inspect.recorded ? 'Recorded period' : inspect.phase ? `${PHASES[inspect.phase].label} (Estimated)` : 'Phase uncertain'}{inspect.cycleDay ? ` · Cycle day ${inspect.cycleDay}` : ''}</p><p>{selected > today ? 'Future / predicted' : 'Historical / today'}{inspect.adjusted ? ' · Manual forecast adjustment applies' : ''}{inspect.ongoing ? ' · Period ongoing' : ''}</p></article>
         </section>
-        <section className="cycle-history"><h3>Your recorded periods</h3>{!model.records.length && <p>No periods logged yet. Your dates stay private.</p>}
+        <section className="cycle-history"><h3>Recorded periods</h3>{!model.records.length && <p>No periods logged yet. Only your two linked accounts can access these dates.</p>}
           {[...model.records].reverse().map(entry => <article key={entry.id}><div><strong>{prettyDate(entry.start_date)} – {entry.end_date ? prettyDate(entry.end_date) : 'Ongoing'}</strong><p>{entry.end_date ? `${daysBetween(entry.start_date, entry.end_date) + 1} recorded days` : 'Add an end date when ready'} · Actual record</p>{entry.notes && <p className="cycle-notes">{entry.notes}</p>}</div><button className="paper-button" disabled={saving} onClick={() => beginLog(entry)}>{entry.end_date ? 'Edit' : 'Mark ended / Edit'}</button><button className="cycle-remove" disabled={saving} onClick={() => setRemoving(entry)}>Remove</button></article>)}
           {model.lengths.length > 0 && <p className="cycle-muted">Prior cycle lengths: {model.lengths.join(', ')} days (oldest first).</p>}
         </section>
         <footer className="cycle-footer"><p>Calendar dates cannot confirm ovulation or biological phases. This tracker is not a reliable method of contraception or a pregnancy diagnosis. <a href="https://www.nhs.uk/conditions/periods/fertility-in-the-menstrual-cycle/" target="_blank" rel="noreferrer">About cycle estimates</a></p>
-          <button className="cycle-remove" disabled={saving} onClick={() => setRemoving('all')}>Delete all my cycle data</button><button className="paper-button" disabled={saving} onClick={() => { void tracker.refresh(); }}>Refresh private journal</button></footer>
-        {removing && <section className="cycle-confirm" role="alertdialog" aria-modal="true" aria-labelledby="cycle-delete-title"><h3 id="cycle-delete-title">{removing === 'all' ? 'Delete all your cycle data?' : 'Remove this period record?'}</h3><p>{removing === 'all' ? 'All period records, notes, settings and overrides will be permanently deleted.' : 'This deletes only the selected actual record and recalculates estimates.'}</p><div className="cycle-actions"><button className="paper-button" disabled={saving} onClick={() => setRemoving(null)}>Keep data</button><button className="paper-button" disabled={saving} onClick={async () => {
-          if (await tracker.mutate(() => removing === 'all' ? repository.deleteAll() : repository.deleteEntry(userId, removing))) { setRemoving(null); setPanel(null); setDraft(null); setDirty(false); setNotice('Deleted from your private journal.'); }
+          <button className="cycle-remove" disabled={saving} onClick={() => setRemoving('all')}>Delete all tracker data</button><button className="paper-button" disabled={saving} onClick={() => { void tracker.refresh(); }}>Refresh tracker</button></footer>
+        {removing && <section className="cycle-confirm" role="alertdialog" aria-modal="true" aria-labelledby="cycle-delete-title"><h3 id="cycle-delete-title">{removing === 'all' ? 'Delete all tracker data?' : 'Remove this period record?'}</h3><p>{removing === 'all' ? 'All period records, notes, settings and overrides will be permanently deleted.' : 'This deletes only the selected actual record and recalculates estimates.'}</p><div className="cycle-actions"><button className="paper-button" disabled={saving} onClick={() => setRemoving(null)}>Keep data</button><button className="paper-button" disabled={saving} onClick={async () => {
+          if (await tracker.mutate(() => removing === 'all' ? repository.deleteAll() : repository.deleteEntry(snapshot.ownerUserId, removing))) { setRemoving(null); setPanel(null); setDraft(null); setDirty(false); setNotice('Deleted from Deena’s tracker.'); }
         }}>Confirm deletion</button></div></section>}
-        {saving && <p role="status">Saving privately…</p>}
+        {saving && <p role="status">Saving to Deena’s tracker…</p>}
       </>}
     </section>
   </div>;

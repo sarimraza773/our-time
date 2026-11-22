@@ -5,22 +5,22 @@ import { validateCycle, validatePeriod, type CycleSettings, type CycleSnapshot, 
 export class CycleAccessError extends Error {}
 function check(error: { code?: string } | null) {
   if (!error) return;
-  if (error.code === '42501' || error.code === 'PGRST301') throw new CycleAccessError('This private tracker is available only to its owner.');
+  if (error.code === '42501' || error.code === 'PGRST301') throw new CycleAccessError('This tracker is available only to Deena and Sarim’s linked accounts.');
   if (['42P01', 'PGRST205', 'PGRST202'].includes(error.code ?? '')) throw new Error('The private tracker database update has not been installed. Your existing calendar is safe.');
   if (['23505', '23514', '23P01'].includes(error.code ?? '')) throw new Error('These dates conflict with a saved record or cycle setting. Refresh and check the dates.');
   throw new Error('The private tracker could not save or load. Check your connection and retry.');
 }
 export function createPeriodRepository(client: SupabaseClient<Database>) {
   return {
-    async load(userId: string): Promise<CycleSnapshot> {
-      const access = await client.rpc('is_private_cycle_owner'); check(access.error);
-      if (!access.data) throw new CycleAccessError('This private tracker is available only to its owner.');
+    async load(_userId: string): Promise<CycleSnapshot> {
+      const access = await client.rpc('cycle_tracker_owner_id'); check(access.error);
+      if (!access.data) throw new CycleAccessError('This tracker is available only to Deena and Sarim’s linked accounts.');
       const [periods, settings] = await Promise.all([
-        client.from('period_entries').select('*').eq('user_id', userId).order('start_date'),
-        client.from('cycle_settings').select('*').eq('user_id', userId).maybeSingle(),
+        client.from('period_entries').select('*').eq('user_id', access.data).order('start_date'),
+        client.from('cycle_settings').select('*').eq('user_id', access.data).maybeSingle(),
       ]);
       check(periods.error); check(settings.error);
-      return { entries: periods.data ?? [], settings: settings.data };
+      return { ownerUserId: access.data, entries: periods.data ?? [], settings: settings.data };
     },
     async saveEntry(userId: string, draft: PeriodDraft, entries: PeriodEntry[], original?: PeriodEntry) {
       validatePeriod(draft, entries);
@@ -44,7 +44,7 @@ export function createPeriodRepository(client: SupabaseClient<Database>) {
         const { error } = await client.from('cycle_settings').insert({ ...value, user_id: userId }).select('user_id').single(); check(error);
       }
     },
-    async deleteAll() { const { error } = await client.rpc('delete_my_cycle_data'); check(error); },
+    async deleteAll() { const { error } = await client.rpc('delete_cycle_tracker_data'); check(error); },
   };
 }
 export type PeriodRepository = ReturnType<typeof createPeriodRepository>;
