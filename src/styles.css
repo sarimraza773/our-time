@@ -161,5 +161,21 @@
 .fullscreen .calendar-personal-tools{margin-top:-9px;margin-left:-10px}
 @media(max-width:720px){.calendar-personal-tools,.fullscreen .calendar-personal-tools{--relax-sticker-size:59px;margin:-16px 0 14px;gap:16px}}
 
-/* The upper sticker wrappers must not isolate multiply blending. Like the
-   lower pair, their white artwork and borders blend into the cream paper. */
+/* Use one fixed cream tint across the upper stickers, including the portion
+   outside the calendar. Their color must not depend on the backdrop. */
+.sticker-filter-definitions{position:absolute;overflow:hidden;pointer-events:none}
+.sticker.sticker-paper-tint{mix-blend-mode:normal;filter:var(--sticker-paper-filter)}
+.sticker.sticker-paper-tint:hover{filter:var(--sticker-paper-filter) saturate(1.08)}
+
+/* A short laptop viewport must not leave only one line for recurring rules. */
+.recurring-panel>h3,.recurring-panel>.add-rule{flex:0 0 auto}
+.rules-list{flex:1;min-height:0}
+.bot-messages{min-height:0}
+@media(min-width:721px){
+  .calendar-paper{height:auto}
+  .planner-grid{flex:none;min-height:440px;height:clamp(440px,calc(min(84dvh,850px) - 350px),500px)}
+  .right-rail{display:grid;grid-template-rows:minmax(220px,1fr) minmax(200px,1fr)}
+  .right-rail .calendar-bot{height:auto;min-height:0}
+  .fullscreen .planner-grid{flex:1;height:auto;min-height:440px}
+  .fullscreen .calendar-paper{overflow-y:auto}
+}
