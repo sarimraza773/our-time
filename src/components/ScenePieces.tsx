@@ -17,18 +17,18 @@ export function PerspectiveSelector({ perspective, authenticatedPerson, onSarim,
 export function Sticker({ src, alt, className }: { src: string; alt: string; className: string }) {
   // Scene artwork is decorative. Photobooth sticker buttons/drag handles use
   // their own components and remain interactive.
-  const filterId = `sticker-paper-${useId().replace(/:/g, '')}`;
-  const paperTint = className.split(' ').some(name => name === 'sticker-sammy' || name === 'sticker-rupert');
-  // Multiply the entire rendered card by the fixed paper color in its own
-  // filter. Backdrop blending changes color wherever the card crosses a border.
+  const filterId = `sticker-translucent-${useId().replace(/:/g, '')}`;
+  // Fade white paper while keeping the colored artwork. Use the same filter
+  // in every corner so transparency also works outside the calendar backdrop.
   return <>
-    {paperTint && <svg aria-hidden="true" focusable="false" width="0" height="0" className="sticker-filter-definitions">
+    <svg aria-hidden="true" focusable="false" width="0" height="0" className="sticker-filter-definitions">
       <defs><filter id={filterId} x="-40%" y="-40%" width="180%" height="180%" colorInterpolationFilters="sRGB">
-        <feColorMatrix type="matrix" values="0.960784314 0 0 0 0  0 0.905882353 0 0 0  0 0 0.811764706 0 0  0 0 0 1 0" />
+        <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  -1.063 -3.576 -0.361 0 5" />
+        <feComposite in2="SourceGraphic" operator="in" />
       </filter></defs>
-    </svg>}
-    <motion.img className={`sticker sticker-decorative ${className}${paperTint ? ' sticker-paper-tint' : ''}`}
-      style={paperTint ? { '--sticker-paper-filter': `url(#${filterId})` } as CSSProperties : undefined} src={src} alt={alt} />
+    </svg>
+    <motion.img className={`sticker sticker-decorative ${className}`}
+      style={{ '--sticker-translucent-filter': `url(#${filterId})` } as CSSProperties} src={src} alt={alt} />
   </>;
 }
 

@@ -161,11 +161,10 @@
 .fullscreen .calendar-personal-tools{margin-top:-9px;margin-left:-10px}
 @media(max-width:720px){.calendar-personal-tools,.fullscreen .calendar-personal-tools{--relax-sticker-size:59px;margin:-16px 0 14px;gap:16px}}
 
-/* Use one fixed cream tint across the upper stickers, including the portion
-   outside the calendar. Their color must not depend on the backdrop. */
+/* All four corners share the same translucent paper and artwork treatment. */
 .sticker-filter-definitions{position:absolute;overflow:hidden;pointer-events:none}
-.sticker.sticker-paper-tint{mix-blend-mode:normal;filter:var(--sticker-paper-filter)}
-.sticker.sticker-paper-tint:hover{filter:var(--sticker-paper-filter) saturate(1.08)}
+.sticker-decorative{mix-blend-mode:multiply;opacity:.65;filter:var(--sticker-translucent-filter)}
+.sticker-decorative:hover{filter:var(--sticker-translucent-filter) saturate(1.08)}
 
 /* A short laptop viewport must not leave only one line for recurring rules. */
 .recurring-panel>h3,.recurring-panel>.add-rule{flex:0 0 auto}
