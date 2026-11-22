@@ -3,6 +3,8 @@ import { DateTime } from 'luxon';
 import type { PeriodRepository } from '../data/periodRepository';
 import { usePeriodTracker } from '../hooks/usePeriodTracker';
 import { addDays, cycleModel, cycleToday, dateOnly, daysBetween, DEFAULT_CYCLE, PHASES, prettyDate, type CycleSettings, type PeriodDraft, type PeriodEntry } from '../lib/period';
+import { PhasePlanner } from './PhasePlanner';
+import { PredictedPeriodLog } from './PredictedPeriodLog';
 import './period.css';
 
 type SettingsDraft = Omit<CycleSettings, 'user_id' | 'updated_at'>;
@@ -11,13 +13,14 @@ export function PeriodTracker({ repository, userId, onClose, today = cycleToday(
 }) {
   const tracker = usePeriodTracker(repository, userId);
   const { snapshot, loading, saving, error, denied } = tracker;
-  const model = useMemo(() => cycleModel(snapshot?.entries ?? [], snapshot?.settings ?? null, today), [snapshot, today]);
+  const model = useMemo(() => cycleModel(snapshot?.entries ?? [], snapshot?.settings ?? null, today, snapshot?.phasePlans ?? [], snapshot?.predictions ?? []), [snapshot, today]);
   const [month, setMonth] = useState(() => dateOnly(today).startOf('month'));
-  const [selected, setSelected] = useState(today), [panel, setPanel] = useState<'log' | 'adjust' | 'settings' | null>(null);
+  const [selected, setSelected] = useState(today), [panel, setPanel] = useState<'log' | 'adjust' | 'settings' | 'phases' | null>(null);
   const [draft, setDraft] = useState<PeriodDraft | null>(null), [original, setOriginal] = useState<PeriodEntry>();
   const [settings, setSettings] = useState<SettingsDraft>(DEFAULT_CYCLE);
   const [lutealInput, setLutealInput] = useState('14');
   const [removing, setRemoving] = useState<PeriodEntry | 'all' | null>(null), [notice, setNotice] = useState('');
+  const [predictionReset, setPredictionReset] = useState(0);
   const [dirty, setDirty] = useState(false);
   const root = useRef<HTMLElement>(null), close = useRef<HTMLButtonElement>(null), closeRef = useRef(() => {});
   const canLeave = () => !saving && (!dirty || window.confirm('Discard unsaved tracker changes?'));
@@ -47,15 +50,17 @@ export function PeriodTracker({ repository, userId, onClose, today = cycleToday(
   useEffect(() => { if (panel) root.current?.querySelector<HTMLElement>('.cycle-form')?.scrollIntoView?.({ block: 'nearest' }); }, [panel]);
   const beginLog = (entry?: PeriodEntry) => {
     if (!canLeave()) return;
+    setPredictionReset(n=>n+1);
     setOriginal(entry); setDraft(entry ? { id: entry.id, start_date: entry.start_date, end_date: entry.end_date, notes: entry.notes }
       : { id: crypto.randomUUID(), start_date: today, end_date: null, notes: '' });
     setDirty(false); setNotice(''); setPanel('log');
   };
   const beginSettings = (view: 'adjust' | 'settings') => {
     if (!canLeave()) return;
-    const { cycle_length, period_duration, luteal_length, estimate_mode, expected_next_date, override_anchor, missed_prediction_on } = model.settings;
+    setPredictionReset(n=>n+1);
+    const { auto_log_predictions, phase_lengths, cycle_length, period_duration, luteal_length, estimate_mode, expected_next_date, override_anchor, missed_prediction_on } = model.settings;
     setLutealInput(String(luteal_length));
-    setSettings({ cycle_length, period_duration, luteal_length, estimate_mode,
+    setSettings({ auto_log_predictions, phase_lengths, cycle_length, period_duration, luteal_length, estimate_mode,
       expected_next_date: model.overrideActive ? expected_next_date : null,
       override_anchor: model.overrideActive ? override_anchor : null,
       missed_prediction_on: model.overrideActive ? missed_prediction_on : null });
@@ -85,8 +90,13 @@ export function PeriodTracker({ repository, userId, onClose, today = cycleToday(
       {loading && <p role="status">Opening Deena’s journal…</p>}
       {error && <div className="cycle-error" role="alert"><p>{error}</p><button className="paper-button" disabled={saving} onClick={() => { void tracker.refresh(); }}>Retry / Refresh</button></div>}
       {snapshot && !denied && <>
-        <div className="cycle-toolbar"><button className="paper-button primary" disabled={saving} onClick={() => beginLog()}>＋ Log Period</button><button className="paper-button" disabled={saving} onClick={() => beginSettings('adjust')}>Adjust Cycle / Override</button><button className="paper-button" disabled={saving} onClick={() => beginSettings('settings')}>Cycle settings</button></div>
+        <div className="cycle-toolbar"><button className="paper-button primary" disabled={saving} onClick={() => beginLog()}>＋ Log Period</button><button className="paper-button" disabled={saving} onClick={() => beginSettings('adjust')}>Adjust Cycle / Override</button><button className="paper-button" disabled={saving} onClick={() => beginSettings('settings')}>Cycle settings</button><button className="paper-button" disabled={saving || snapshot.planningAvailable === false} onClick={() => { if (canLeave()) {setPredictionReset(n=>n+1);setPanel('phases');setDirty(false);} }}>Set phases</button></div>
         {notice && <p className="cycle-notice" role="status">{notice}</p>}
+        {snapshot.planningAvailable === false && <p className="cycle-muted">Phase editing and automatic logs need the latest tracker database update. Existing period records still work.</p>}
+        {panel === 'phases' && <PhasePlanner anchor={model.latest?.start_date ?? selected} settings={model.settings} plans={snapshot.phasePlans ?? []} saving={saving}
+          onDirty={() => setDirty(true)} onCancel={() => {setPanel(null);setDirty(false);}}
+          onSave={(plan,future,original) => tracker.mutate(() => repository.savePhasePlan(plan,future,original))}
+          onRemove={plan => tracker.mutate(() => repository.deletePhasePlan(plan))}/>} 
         {panel === 'log' && draft && <form className="cycle-form" onSubmit={savePeriod}><fieldset disabled={saving}>
           <h3>{original ? 'Edit period record' : 'Log Period'}</h3><p>Use the first day of bleeding as cycle day 1.</p>
           <div className="cycle-pair"><label>Period start date<input type="date" required min="1900-01-01" max={today} value={draft.start_date} onChange={e => changePeriod({ start_date: e.target.value })} /></label>
@@ -98,10 +108,12 @@ export function PeriodTracker({ repository, userId, onClose, today = cycleToday(
         {(panel === 'settings' || panel === 'adjust') && <form className="cycle-form" onSubmit={saveSettings}><fieldset disabled={saving}>
           <h3>{panel === 'adjust' ? 'Adjust Cycle / Override' : 'Your cycle settings'}</h3>
           {panel === 'settings' ? <><p>Initial suggestions: 28-day cycle, 5-day period, 14-day luteal estimate. These are not personal measurements.</p>
-            <div className="cycle-pair"><label>Typical cycle length (days)<input type="number" required min="10" max="120" value={settings.cycle_length} onChange={e => changeSettings({ cycle_length: Number(e.target.value) })} /></label>
-            <label>Typical period duration (days)<input type="number" required min="1" max="30" value={settings.period_duration} onChange={e => changeSettings({ period_duration: Number(e.target.value) })} /></label>
+            <div className="cycle-pair"><label>Typical cycle length (days)<input type="number" required min="10" max="120" value={settings.cycle_length} onChange={e => changeSettings({ cycle_length: Number(e.target.value), phase_lengths:null })} /></label>
+            <label>Typical period duration (days)<input type="number" required min="1" max="30" value={settings.period_duration} onChange={e => changeSettings({ period_duration: Number(e.target.value), phase_lengths:null })} /></label>
             <label>Expected luteal length (optional, days)<input type="number" min="5" max="25" placeholder="14-day default" value={lutealInput} onChange={e => { setLutealInput(e.target.value); changeSettings({ luteal_length: e.target.value ? Number(e.target.value) : 14 }); }} /></label>
-            <label>Estimate source<select value={settings.estimate_mode} onChange={e => changeSettings({ estimate_mode: e.target.value as 'history' | 'manual' })}><option value="history">Recorded history (3+ starts)</option><option value="manual">Manually configured length</option></select></label></div>
+            <label>Estimate source<select value={settings.estimate_mode} onChange={e => changeSettings({ estimate_mode: e.target.value as 'history' | 'manual', phase_lengths:null })}><option value="history">Recorded history (3+ starts)</option><option value="manual">Manually configured length</option></select></label></div>
+            {settings.phase_lengths && <p className="cycle-muted">Custom phase durations are active. Their total sets the cycle length. <button type="button" className="paper-button" onClick={()=>changeSettings({phase_lengths:null})}>Reset future phase durations</button></p>}
+            {snapshot.planningAvailable !== false && <label className="cycle-check"><input type="checkbox" checked={settings.auto_log_predictions} onChange={e=>changeSettings({auto_log_predictions:e.target.checked})}/>Automatically add predicted period logs after 3 recorded starts</label>}
             <p className="cycle-muted">History uses the median of up to six cycle lengths. Variable cycles make forecasts less certain.</p></> : <>
             <p>A period arrived early? Log its actual start. Forecast changes below never alter recorded periods.</p><button type="button" className="paper-button" onClick={() => beginLog()}>Log an actual start</button>
             <label>Expected next-period date (manual prediction)<input type="date" disabled={!model.latest} min={model.latest ? addDays(model.latest.start_date, 1) : undefined} max="2199-12-31" value={settings.expected_next_date ?? ''} onChange={e => changeSettings({ expected_next_date: e.target.value || null, override_anchor: model.latest?.start_date ?? null })} /></label>
@@ -114,9 +126,9 @@ export function PeriodTracker({ repository, userId, onClose, today = cycleToday(
         </fieldset></form>}
         <p className="cycle-uncertainty">{model.uncertainty}</p>
         {model.overdue && <p className="cycle-overdue">The forecast date has passed. No new period has been recorded. Log an actual start or adjust the prediction.</p>}
-        <div className="cycle-cards"><article className={`cycle-card phase-${current.phase ?? 'unknown'}`}><p className="eyebrow">Current phase</p><h3>{currentName} {current.phase && <small>({current.recorded ? 'Recorded' : 'Estimated'})</small>}</h3>
-          <p className="cycle-day">{current.cycleDay ? `Cycle day ${current.cycleDay}` : 'Your journal begins with a period'}</p>
-          {current.phase && <><dl><div><dt>{current.recorded ? 'Recorded start' : 'Estimated phase start'}</dt><dd>{prettyDate(current.start)}</dd></div><div><dt>{current.recorded ? 'Recorded end' : 'Estimated phase end'}</dt><dd>{current.ongoing ? 'Ongoing — end not recorded' : prettyDate(current.end)}</dd></div></dl>
+        <div className="cycle-cards"><article className={`cycle-card phase-${current.phase ?? 'unknown'}`}><p className="eyebrow">Current phase</p><h3>{currentName} {current.phase && <small>({current.recorded ? 'Recorded' : current.manual ? 'Manually set' : current.automatic ? 'Predicted log' : 'Estimated'})</small>}</h3>
+          <p className="cycle-day">{current.cycleDay ? `${current.automatic ? 'Predicted cycle day' : 'Cycle day'} ${current.cycleDay}` : 'Your journal begins with a period'}</p>
+          {current.phase && <><dl><div><dt>{current.recorded ? 'Recorded start' : current.manual ? 'Manually set phase start' : 'Estimated phase start'}</dt><dd>{prettyDate(current.start)}</dd></div><div><dt>{current.recorded ? 'Recorded end' : current.manual ? 'Manually set phase end' : 'Estimated phase end'}</dt><dd>{current.ongoing ? 'Ongoing — end not recorded' : prettyDate(current.end)}</dd></div></dl>
           <p>{current.phaseDay && `Day ${current.phaseDay} in this ${current.recorded ? 'recorded period' : 'estimated phase'}`}{current.end && ` · ${Math.max(0, daysBetween(today, current.end))} estimated days remaining`}</p><p>{PHASES[current.phase].explanation}</p></>}
         </article><article className="cycle-card next-period"><p className="eyebrow">Looking ahead · Estimated</p><h3>Next period expected</h3><p className="cycle-date">{prettyDate(model.next)}</p><p>Estimated end: {prettyDate(model.nextEnd)}</p>
           <p>{model.daysRemaining === null || !model.next ? 'Waiting for enough information' : model.daysRemaining < 0 ? `${-model.daysRemaining} days past the forecast` : model.daysRemaining === 0 ? 'Expected around today' : `About ${model.daysRemaining} days away`}</p>{model.ovulationWindow && <p>Estimated ovulation window: {prettyDate(model.ovulationWindow.start)} – {prettyDate(model.ovulationWindow.end)}. Unconfirmed.</p>}<p className="cycle-muted">{model.next ? model.source : 'No precise forecast yet'} · {model.overrideActive && 'Manually adjusted · '}Predictions are not guaranteed.</p>
@@ -130,19 +142,22 @@ export function PeriodTracker({ repository, userId, onClose, today = cycleToday(
             const valid = date >= '1900-01-01' && date <= '2199-12-31';
             const info = valid ? model.inspect(date) : null;
             return <button key={date} disabled={!valid} type="button" aria-pressed={selected === date} aria-current={date === today ? 'date' : undefined}
-              aria-label={`${date}${info?.recorded ? ', recorded period' : info?.phase ? `, ${PHASES[info.phase].label}, estimated` : ', phase unknown'}${info?.adjusted ? ', manually adjusted' : ''}`}
+              aria-label={`${date}${info?.recorded ? ', recorded period' : info?.phase ? `, ${PHASES[info.phase].label}, ${info.manual ? 'manually set' : 'estimated'}` : ', phase unknown'}${info?.adjusted ? ', manually adjusted' : ''}`}
               className={`${info?.phase ? `phase-${info.phase}` : ''} ${info?.recorded ? 'recorded' : info?.phase ? 'predicted' : ''} ${DateTime.fromISO(date).month !== month.month ? 'outside' : ''}`}
               onClick={() => setSelected(date)}>{Number(date.slice(-2))}{info?.adjusted && <sup>✎</sup>}</button>;
           })}</div><p className="cycle-muted">Solid border: recorded bleeding · Dashed border: estimated phase · ✎ Manual forecast adjustment</p>
-          <article className="cycle-inspection" aria-live="polite"><h4>{prettyDate(selected)}</h4><p>{inspect.recorded ? 'Recorded period' : inspect.phase ? `${PHASES[inspect.phase].label} (Estimated)` : 'Phase uncertain'}{inspect.cycleDay ? ` · Cycle day ${inspect.cycleDay}` : ''}</p><p>{selected > today ? 'Future / predicted' : 'Historical / today'}{inspect.adjusted ? ' · Manual forecast adjustment applies' : ''}{inspect.ongoing ? ' · Period ongoing' : ''}</p></article>
+          <article className="cycle-inspection" aria-live="polite"><h4>{prettyDate(selected)}</h4><p>{inspect.recorded ? 'Recorded period' : inspect.phase ? `${PHASES[inspect.phase].label} (${inspect.manual ? 'Manually set' : inspect.automatic ? 'Automatic prediction' : 'Estimated'})` : 'Phase uncertain'}{inspect.cycleDay ? ` · Cycle day ${inspect.cycleDay}` : ''}</p><p>{selected > today ? 'Future / predicted' : 'Historical / today'}{inspect.adjusted ? ' · Manual forecast adjustment applies' : ''}{inspect.ongoing ? ' · Period ongoing' : ''}</p></article>
         </section>
+        {snapshot.planningAvailable !== false && <PredictedPeriodLog predictions={snapshot.predictions ?? []} starts={model.records.length} enabled={model.settings.auto_log_predictions} today={today} saving={saving} onDirty={setDirty} resetKey={predictionReset} onBegin={()=>{if(!canLeave())return false;setPanel(null);return true;}}
+          onConfirm={(prediction,draft) => tracker.mutate(() => repository.confirmPrediction(prediction,draft,snapshot.entries))}
+          onDismiss={prediction => tracker.mutate(() => repository.dismissPrediction(prediction))}/>}
         <section className="cycle-history"><h3>Recorded periods</h3>{!model.records.length && <p>No periods logged yet. Only your two linked accounts can access these dates.</p>}
           {[...model.records].reverse().map(entry => <article key={entry.id}><div><strong>{prettyDate(entry.start_date)} – {entry.end_date ? prettyDate(entry.end_date) : 'Ongoing'}</strong><p>{entry.end_date ? `${daysBetween(entry.start_date, entry.end_date) + 1} recorded days` : 'Add an end date when ready'} · Actual record</p>{entry.notes && <p className="cycle-notes">{entry.notes}</p>}</div><button className="paper-button" disabled={saving} onClick={() => beginLog(entry)}>{entry.end_date ? 'Edit' : 'Mark ended / Edit'}</button><button className="cycle-remove" disabled={saving} onClick={() => setRemoving(entry)}>Remove</button></article>)}
           {model.lengths.length > 0 && <p className="cycle-muted">Prior cycle lengths: {model.lengths.join(', ')} days (oldest first).</p>}
         </section>
         <footer className="cycle-footer"><p>Calendar dates cannot confirm ovulation or biological phases. This tracker is not a reliable method of contraception or a pregnancy diagnosis. <a href="https://www.nhs.uk/conditions/periods/fertility-in-the-menstrual-cycle/" target="_blank" rel="noreferrer">About cycle estimates</a></p>
           <button className="cycle-remove" disabled={saving} onClick={() => setRemoving('all')}>Delete all tracker data</button><button className="paper-button" disabled={saving} onClick={() => { void tracker.refresh(); }}>Refresh tracker</button></footer>
-        {removing && <section className="cycle-confirm" role="alertdialog" aria-modal="true" aria-labelledby="cycle-delete-title"><h3 id="cycle-delete-title">{removing === 'all' ? 'Delete all tracker data?' : 'Remove this period record?'}</h3><p>{removing === 'all' ? 'All period records, notes, settings and overrides will be permanently deleted.' : 'This deletes only the selected actual record and recalculates estimates.'}</p><div className="cycle-actions"><button className="paper-button" disabled={saving} onClick={() => setRemoving(null)}>Keep data</button><button className="paper-button" disabled={saving} onClick={async () => {
+        {removing && <section className="cycle-confirm" role="alertdialog" aria-modal="true" aria-labelledby="cycle-delete-title"><h3 id="cycle-delete-title">{removing === 'all' ? 'Delete all tracker data?' : 'Remove this period record?'}</h3><p>{removing === 'all' ? 'All period records, phase plans, predicted logs, notes, settings and overrides will be permanently deleted.' : 'This deletes only the selected actual record and recalculates estimates.'}</p><div className="cycle-actions"><button className="paper-button" disabled={saving} onClick={() => setRemoving(null)}>Keep data</button><button className="paper-button" disabled={saving} onClick={async () => {
           if (await tracker.mutate(() => removing === 'all' ? repository.deleteAll() : repository.deleteEntry(snapshot.ownerUserId, removing))) { setRemoving(null); setPanel(null); setDraft(null); setDirty(false); setNotice('Deleted from Deena’s tracker.'); }
         }}>Confirm deletion</button></div></section>}
         {saving && <p role="status">Saving to Deena’s tracker…</p>}

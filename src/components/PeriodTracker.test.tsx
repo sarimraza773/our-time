@@ -12,6 +12,7 @@ function fixture(initial: Omit<CycleSnapshot, 'ownerUserId'> = { entries: [], se
     saveEntry: vi.fn(async (user, draft) => { data.entries = [...data.entries.filter(e => e.id !== draft.id),{...draft,user_id:user,updated_at:String(++version)}]; }),
     saveSettings: vi.fn(async (user, value) => { data.settings = {...value,user_id:user,updated_at:String(++version)}; }),
     deleteEntry: vi.fn(async (_user, entry) => { data.entries = data.entries.filter(e => e.id !== entry.id); }),
+    savePhasePlan: vi.fn(async()=>{}), deletePhasePlan: vi.fn(async()=>{}), dismissPrediction: vi.fn(async()=>{}), confirmPrediction: vi.fn(async()=>{}),
     deleteAll: vi.fn(async () => { data = {ownerUserId:'synthetic-owner',entries:[],settings:null}; }),
   };
   const show = (viewer = "synthetic-owner") => render(<PeriodTracker repository={repository} userId={viewer} today={today} onClose={() => {}} />);

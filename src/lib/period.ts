@@ -1,14 +1,16 @@
 import { DateTime } from 'luxon';
+import type { PhasePlan, CyclePrediction, PhaseLengths } from './cyclePlanning';
 
 export type PeriodEntry = { id: string; user_id: string; start_date: string; end_date: string | null; notes: string; updated_at: string };
 export type CycleSettings = {
+  auto_log_predictions: boolean; phase_lengths: PhaseLengths | null;
   user_id: string; cycle_length: number; period_duration: number; luteal_length: number;
   estimate_mode: 'history' | 'manual'; expected_next_date: string | null;
   override_anchor: string | null; missed_prediction_on: string | null; updated_at: string;
 };
 export type PeriodDraft = Pick<PeriodEntry, 'id' | 'start_date' | 'end_date' | 'notes'>;
-export type CycleSnapshot = { ownerUserId: string; entries: PeriodEntry[]; settings: CycleSettings | null };
-export const DEFAULT_CYCLE = { cycle_length: 28, period_duration: 5, luteal_length: 14, estimate_mode: 'history' as const,
+export type CycleSnapshot = { ownerUserId: string; planningAvailable?: boolean; phasePlans?: PhasePlan[]; predictions?: CyclePrediction[]; entries: PeriodEntry[]; settings: CycleSettings | null };
+export const DEFAULT_CYCLE = { auto_log_predictions: true, phase_lengths: null as PhaseLengths | null, cycle_length: 28, period_duration: 5, luteal_length: 14, estimate_mode: 'history' as const,
   expected_next_date: null, override_anchor: null, missed_prediction_on: null };
 export const PHASES = {
   menstruation: { label: 'Menstruation', explanation: 'Bleeding days you record stay separate from calendar estimates.' },
@@ -42,6 +44,10 @@ export function validateCycle(settings: Omit<CycleSettings, 'user_id' | 'updated
     if (!Number.isInteger(value) || value < min || value > max) throw new Error('Use whole days: cycle 10–120, period 1–30, luteal estimate 5–25.');
   }
   if (settings.period_duration >= settings.cycle_length || settings.luteal_length >= settings.cycle_length) throw new Error('Period duration and luteal estimate must each be shorter than your cycle.');
+  if (settings.phase_lengths) {
+    const values = ['menstruation','follicular','ovulation','luteal'].map(p => settings.phase_lengths![p as Phase]);
+    if (values.some(v => !Number.isInteger(v) || v < 1 || v > 90) || values.reduce((a,b)=>a+b,0) !== settings.cycle_length || settings.phase_lengths.menstruation !== settings.period_duration || settings.estimate_mode !== 'manual') throw new Error('Custom phase durations must match the manual cycle total and period duration. Reset phase durations to use history.');
+  }
   if (!['history', 'manual'].includes(settings.estimate_mode)) throw new Error('Choose a valid estimate source.');
   if (settings.expected_next_date) {
     dateOnly(settings.expected_next_date);
@@ -50,8 +56,8 @@ export function validateCycle(settings: Omit<CycleSettings, 'user_id' | 'updated
   if (settings.override_anchor) dateOnly(settings.override_anchor);
   if (settings.missed_prediction_on) dateOnly(settings.missed_prediction_on);
 }
-export function cycleModel(entries: PeriodEntry[], saved: CycleSettings | null, today = cycleToday()) {
-  const settings = saved ?? DEFAULT_CYCLE;
+export function cycleModel(entries: PeriodEntry[], saved: CycleSettings | null, today = cycleToday(), phasePlans: PhasePlan[] = [], predictions: CyclePrediction[] = []) {
+  const settings = { ...DEFAULT_CYCLE, ...saved };
   const records = [...entries].sort((a, b) => a.start_date.localeCompare(b.start_date));
   const lengths = records.slice(1).map((e, i) => daysBetween(records[i].start_date, e.start_date));
   const recent = lengths.slice(-6);
@@ -63,25 +69,31 @@ export function cycleModel(entries: PeriodEntry[], saved: CycleSettings | null, 
   const overrideActive = !!latest && settings.override_anchor === latest.start_date;
   const next = latest ? (overrideActive && settings.expected_next_date ? settings.expected_next_date : length ? addDays(latest.start_date, length) : null) : null;
   const missed = overrideActive ? settings.missed_prediction_on : null;
-  const suppressed = !!missed && (!next || next <= missed);
+  const suppressed = (!!missed && (!next || next <= missed)) || predictions.some(p => p.anchor_start === latest?.start_date && p.start_date === next && p.status === 'dismissed');
   const overdue = !!next && next < today;
   const irregular = recent.length > 1 && Math.max(...recent) - Math.min(...recent) > 7;
-  const source = overrideActive && settings.expected_next_date ? 'Manual prediction' : settings.estimate_mode === 'manual' ? 'Manually configured cycle length' : 'Median of recorded cycles (up to six)';
+  const source = settings.phase_lengths ? 'Manually configured phase durations' : overrideActive && settings.expected_next_date ? 'Manual prediction' : settings.estimate_mode === 'manual' ? 'Manually configured cycle length' : 'Median of recorded cycles (up to six)';
   const uncertainty = !latest ? 'Log a period to begin. Defaults are starting suggestions, not personal measurements.'
     : !length && !(overrideActive && settings.expected_next_date) ? 'Not enough history for a prediction. Record three period starts or choose a manually configured cycle length.'
     : irregular ? 'Your recorded cycles vary. Dates and phases are especially uncertain.' : 'Calendar estimates can shift; biological phase and ovulation are not confirmed.';
-  type DayInfo = { phase: Phase | null; start: string | null; end: string | null; cycleDay: number | null; phaseDay: number | null; recorded: boolean; predicted: boolean; adjusted: boolean; ongoing: boolean };
+  type DayInfo = { phase: Phase | null; start: string | null; end: string | null; cycleDay: number | null; phaseDay: number | null; recorded: boolean; predicted: boolean; adjusted: boolean; ongoing: boolean; manual?: boolean; automatic?: boolean };
   function inspect(date: string): DayInfo {
     dateOnly(date);
     const anchor = records.filter(e => e.start_date <= date).at(-1);
     const empty: DayInfo = { phase: null, start: null, end: null, cycleDay: null, phaseDay: null, recorded: false, predicted: date > today, adjusted: false, ongoing: false };
-    if (!anchor) return empty;
+    const manualPlan = [...phasePlans].filter(p => p.cycle_start_date <= date && (!anchor || p.cycle_start_date >= anchor.start_date)).sort((a,b) => b.cycle_start_date.localeCompare(a.cycle_start_date))[0];
+    const manualPhase = manualPlan?.phases.find(p => p.start_date <= date && date <= p.end_date);
+    const manualInfo = manualPhase ? { ...empty, phase: manualPhase.phase, start: manualPhase.start_date, end: manualPhase.end_date, cycleDay: daysBetween(anchor?.start_date ?? manualPlan!.cycle_start_date, date) + 1, phaseDay: daysBetween(manualPhase.start_date, date) + 1, predicted: true, adjusted: true, manual: true } : null;
+    if (!anchor) return manualInfo ?? empty;
     const nextRecord = records.find(e => e.start_date > anchor.start_date);
     const isLatest = anchor.id === latest?.id;
     const adjusted = isLatest && overrideActive && !!(settings.expected_next_date || missed);
     const recorded = date <= today && date <= (anchor.end_date ?? today);
     const day = daysBetween(anchor.start_date, date) + 1;
     if (recorded) return { phase: 'menstruation', start: anchor.start_date, end: anchor.end_date, cycleDay: day, phaseDay: day, recorded: true, predicted: false, adjusted, ongoing: !anchor.end_date };
+    if (manualInfo) return manualInfo;
+    const automatic = settings.auto_log_predictions && records.length >= 3 && !suppressed ? predictions.find(p => p.status === 'predicted' && p.anchor_start === latest?.start_date && p.start_date <= date && date <= p.end_date) : null;
+    if (automatic) return { ...empty, phase: 'menstruation', start: automatic.start_date, end: automatic.end_date, cycleDay: daysBetween(automatic.start_date,date)+1, phaseDay: daysBetween(automatic.start_date,date)+1, predicted: true, automatic: true };
     // A late/missed prediction never silently starts a new actual cycle or asserts a late biological phase.
     if (isLatest && (suppressed || overdue) && date >= today) return { ...empty, cycleDay: day, adjusted };
     let boundary = nextRecord?.start_date ?? (isLatest ? next : null);
@@ -92,6 +104,15 @@ export function cycleModel(entries: PeriodEntry[], saved: CycleSettings | null, 
       if (!isLatest || date < today || date >= addDays(boundary, settings.period_duration)) return { ...empty, cycleDay: day, adjusted };
       start = boundary;
       return { phase: 'menstruation', start, end: addDays(start, settings.period_duration - 1), cycleDay: daysBetween(start, date) + 1, phaseDay: daysBetween(start, date) + 1, recorded: false, predicted: true, adjusted, ongoing: false };
+    }
+    if (settings.phase_lengths) {
+      let phaseStart = start;
+      for (const phase of ['menstruation','follicular','ovulation','luteal'] as Phase[]) {
+        const phaseEnd = addDays(phaseStart, settings.phase_lengths[phase] - 1);
+        if (phaseStart <= date && date <= phaseEnd) return { ...empty, phase, start: phaseStart, end: phaseEnd, cycleDay: day, phaseDay: daysBetween(phaseStart,date)+1, predicted: true };
+        phaseStart = addDays(phaseEnd,1);
+      }
+      return { ...empty, cycleDay: day };
     }
     const periodEnd = anchor.end_date ?? addDays(start, settings.period_duration - 1);
     const ovulation = addDays(boundary, -settings.luteal_length);
@@ -108,7 +129,7 @@ export function cycleModel(entries: PeriodEntry[], saved: CycleSettings | null, 
   const timelineDays = latest && next && !suppressed && !overdue ? Math.min(120, daysBetween(latest.start_date, next)) : 0;
   return { settings, records, lengths, length, latest, next: suppressed ? null : next, nextEnd: next && !suppressed ? addDays(next, settings.period_duration - 1) : null,
     source, uncertainty, irregular, overdue, missed, overrideActive, current, inspect,
-    ovulationWindow: latest && next && !suppressed && !overdue && addDays(latest.end_date ?? addDays(latest.start_date, settings.period_duration - 1), 1) < addDays(next, -settings.luteal_length - 1)
+    ovulationWindow: !settings.phase_lengths && latest && next && !suppressed && !overdue && addDays(latest.end_date ?? addDays(latest.start_date, settings.period_duration - 1), 1) < addDays(next, -settings.luteal_length - 1)
       ? { start: addDays(next, -settings.luteal_length - 1), end: addDays(next, -settings.luteal_length + 1) } : null,
     daysRemaining: next ? daysBetween(today, next) : null,
     timeline: Array.from({ length: timelineDays }, (_, i) => ({ date: addDays(latest!.start_date, i), ...inspect(addDays(latest!.start_date, i)) })),

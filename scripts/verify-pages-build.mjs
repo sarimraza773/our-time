@@ -25,7 +25,7 @@ for (const file of assets.filter(name => name.endsWith('.js'))) {
   ensure(!/["'`]\/assets\//.test(js), 'Runtime JavaScript contains an unprefixed /assets/ URL.');
   ensure(!js.includes('LOCAL QA FIXTURE') && !js.includes('our-time-disposable-journal-qa') && !js.includes('Synthetic local QA'), 'QA fixture leaked into the production build.');
 }
-for (const control of ['Recurring event', 'Event Color', 'Custom color', 'Period Tracker', 'All 24 hours']) {
+for (const control of ['Recurring event', 'Event Color', 'Custom color', 'Period Tracker', 'All 24 hours', 'Set phases', 'Automatic predicted period log']) {
   ensure(applicationJs.includes(control), `Production bundle is missing required control: ${control}`);
 }
 const artwork = ['botanical-frame.png', 'sticker-sammy.jpeg', 'sticker-rupert.jpeg', 'sticker-chadwick.jpeg', 'sticker-carlisle.jpeg'];

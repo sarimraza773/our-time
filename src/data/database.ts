@@ -1,3 +1,4 @@
+import type { PhasePlan, CyclePrediction } from '../lib/cyclePlanning';
 import type { PeriodEntry, CycleSettings } from '../lib/period';
 import type { EventCategory, EventColor, OwnerId, RecurrencePattern } from '../types';
 import type { Memory, Contribution } from '../lib/photobooth';
@@ -32,6 +33,8 @@ type Table<Row, Insert> = { Row: Row; Insert: Insert; Update: Partial<Insert>; R
 export type Database = {
   public: {
     Tables: {
+      cycle_phase_plans: Table<PhasePlan, never>;
+      cycle_predictions: Table<CyclePrediction, never>;
       period_entries: Table<PeriodEntry, Omit<PeriodEntry, 'updated_at'>>;
       cycle_settings: Table<CycleSettings, Omit<CycleSettings, 'updated_at'>>;
       bookshelf_titles: Table<BookTitle, { calendar_id: string; book_key: BookKey; title: string }>;
@@ -47,6 +50,11 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      sync_cycle_predictions: { Args: Record<string, never>; Returns: undefined };
+      save_cycle_phase_plan: { Args: { p_cycle_start: string; p_phases: Json; p_use_for_future: boolean; p_expected_updated_at: string | null }; Returns: undefined };
+      delete_cycle_phase_plan: { Args: { p_cycle_start: string; p_expected_updated_at: string }; Returns: undefined };
+      dismiss_cycle_prediction: { Args: { p_id: string; p_expected_updated_at: string }; Returns: undefined };
+      confirm_cycle_prediction: { Args: { p_id: string; p_start: string; p_end: string | null; p_notes: string; p_expected_updated_at: string }; Returns: undefined };
       cycle_tracker_owner_id: { Args: Record<string, never>; Returns: string | null };
       delete_cycle_tracker_data: { Args: Record<string, never>; Returns: undefined };
       is_private_cycle_owner: { Args: Record<string, never>; Returns: boolean };

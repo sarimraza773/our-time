@@ -123,3 +123,11 @@ See [PERIOD_TRACKER.md](PERIOD_TRACKER.md) for model limitations, the additive t
 ## Shared tracker and sticker follow-up
 
 The tracker entry is available to both authenticated linked profiles. Apply the reviewed `202611220003_shared_period_tracker.sql` after its tracker prerequisites, only with production migration approval. This replaces the prior owner-only policy with the explicitly requested two-account editing model. No unrelated account can access the records. See PERIOD_TRACKER.md for safe CLI history/dry-run checks. The top sticker wrappers now preserve the same paper blending as the lower pair without changing any artwork files.
+
+
+## Phase plans and automatic predicted logs
+
+The next update adds Set phases and automatic prediction logs after three actual starts. The first three November 22 migrations have been applied; review/apply only the new `202611220004_phase_plans_and_predictions.sql` after explicit production approval. The UI preserves existing tracker functions while that migration is pending. Automatic logs are clearly predicted, remain outside confirmed history, and require an explicit confirmation before bleeding becomes an actual record. See PERIOD_TRACKER.md for dates, defaults, pause/dismiss behavior and the exact CLI workflow.
+
+
+`202611220004_phase_plans_and_predictions.sql` has now been applied to the existing production database after explicit approval. All four November 22 versions should appear in remote history; no replay is required.
