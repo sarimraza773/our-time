@@ -15,8 +15,7 @@ export function PerspectiveSelector({ perspective, authenticatedPerson, onSarim,
 }
 
 export function Sticker({ src, alt, className }: { src: string; alt: string; className: string }) {
-  // Scene artwork is decorative. Photobooth sticker buttons/drag handles use
-  // their own components and remain interactive.
+  // Decorative scene artwork keeps its original hover and press reactions.
   const filterId = `sticker-translucent-${useId().replace(/:/g, '')}`;
   // Fade white paper while keeping the colored artwork. Use the same filter
   // in every corner so transparency also works outside the calendar backdrop.
@@ -27,7 +26,7 @@ export function Sticker({ src, alt, className }: { src: string; alt: string; cla
         <feComposite in2="SourceGraphic" operator="in" />
       </filter></defs>
     </svg>
-    <motion.img className={`sticker sticker-decorative ${className}`}
+    <motion.img className={`sticker sticker-decorative ${className}`} whileHover={{ rotate:3, scale:1.07 }} whileTap={{ scale:.96 }}
       style={{ '--sticker-translucent-filter': `url(#${filterId})` } as CSSProperties} src={src} alt={alt} />
   </>;
 }
