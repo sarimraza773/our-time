@@ -18,13 +18,14 @@ describe('phase planning and predicted log model',()=>{
  it('applies manually set dates to inspection and keeps recorded bleeding higher priority',()=>{
   const records=[entry('2026-03-01','2026-03-05')],plan={...makePhasePlan('2026-03-01',settings),user_id:'synthetic-owner',updated_at:'v1'};
   const model=cycleModel(records,settings,'2026-03-08',[plan]);
-  expect(model.current).toMatchObject({phase:'follicular',manual:true});expect(model.inspect('2026-03-03')).toMatchObject({phase:'menstruation',recorded:true});
+  expect(model.current).toMatchObject({phase:'follicular',manual:true});expect(model.timeline).toHaveLength(28);expect(model.timeline.find(d=>d.date==='2026-03-08')?.manual).toBe(true);
+    expect(cycleModel([],null,'2026-03-08',[plan]).timeline).toHaveLength(28);expect(model.inspect('2026-03-03')).toMatchObject({phase:'menstruation',recorded:true});
  });
  it('displays an active automatic prediction without changing actual history or counting it for estimation',()=>{
   const records=[entry('2026-01-01','2026-01-05'),entry('2026-01-29','2026-02-02'),entry('2026-02-26','2026-03-02')];
   const p={id:'prediction',user_id:'synthetic-owner',anchor_start:'2026-02-26',start_date:'2026-03-26',end_date:'2026-03-30',status:'predicted' as const,confirmed_entry_id:null,updated_at:'v1'};
   const model=cycleModel(records,settings,'2026-03-27',[],[p]);
-  expect(model.current).toMatchObject({phase:'menstruation',automatic:true,predicted:true,recorded:false,cycleDay:2});expect(model.records).toHaveLength(3);expect(model.lengths).toEqual([28,28]);
+  expect(model.current).toMatchObject({phase:'menstruation',automatic:true,predicted:true,recorded:false,cycleDay:2});expect(model.timeline[0].date).toBe('2026-03-26');expect(model.timeline.find(d=>d.date==='2026-03-27')?.automatic).toBe(true);expect(model.records).toHaveLength(3);expect(model.lengths).toEqual([28,28]);
   expect(cycleModel(records,{...settings,auto_log_predictions:false},'2026-03-27',[],[p]).current.automatic).toBeUndefined();
   expect(cycleModel(records,settings,'2026-03-27',[],[{...p,status:'dismissed'}]).next).toBeNull();
  });

@@ -126,12 +126,16 @@ export function cycleModel(entries: PeriodEntry[], saved: CycleSettings | null, 
     return { phase, start: phaseStart, end: phaseEnd, cycleDay: day, phaseDay: daysBetween(phaseStart, date) + 1, recorded: false, predicted: true, adjusted, ongoing: false };
   }
   const current = inspect(today);
-  const timelineDays = latest && next && !suppressed && !overdue ? Math.min(120, daysBetween(latest.start_date, next)) : 0;
+  const currentPlan = [...phasePlans].sort((a,b)=>b.cycle_start_date.localeCompare(a.cycle_start_date)).find(p => p.cycle_start_date <= today && p.phases.at(-1)!.end_date >= today && (!latest || p.cycle_start_date >= latest.start_date));
+  const timelineStart = currentPlan?.cycle_start_date ?? (current.automatic ? current.start : latest?.start_date);
+  const timelineDays = currentPlan ? daysBetween(currentPlan.cycle_start_date,currentPlan.phases.at(-1)!.end_date)+1
+    : current.automatic && length ? Math.min(120,length)
+    : latest && next && !suppressed && !overdue ? Math.min(120,daysBetween(latest.start_date,next)) : 0;
   return { settings, records, lengths, length, latest, next: suppressed ? null : next, nextEnd: next && !suppressed ? addDays(next, settings.period_duration - 1) : null,
     source, uncertainty, irregular, overdue, missed, overrideActive, current, inspect,
     ovulationWindow: !settings.phase_lengths && latest && next && !suppressed && !overdue && addDays(latest.end_date ?? addDays(latest.start_date, settings.period_duration - 1), 1) < addDays(next, -settings.luteal_length - 1)
       ? { start: addDays(next, -settings.luteal_length - 1), end: addDays(next, -settings.luteal_length + 1) } : null,
     daysRemaining: next ? daysBetween(today, next) : null,
-    timeline: Array.from({ length: timelineDays }, (_, i) => ({ date: addDays(latest!.start_date, i), ...inspect(addDays(latest!.start_date, i)) })),
+    timeline: Array.from({ length: timelineDays }, (_, i) => ({ date: addDays(timelineStart!, i), ...inspect(addDays(timelineStart!, i)) })),
   };
 }
