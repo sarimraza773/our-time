@@ -33,8 +33,10 @@ export function HangingCalendar(props: CalendarSceneProps) {
         <Sticker className="sticker-rupert" src={publicAsset('assets/sticker-rupert.jpeg')} alt="Blue sleepy character sticker" />
       </div>
       <div className="calendar-paper">
-        <Sticker className="sticker-sammy" src={publicAsset('assets/sticker-sammy.jpeg')} alt="Relax candle character sticker" />
-        {props.onPeriodTracker && <div className="calendar-personal-tools"><button className="paper-button period-entry" onClick={props.onPeriodTracker}>✿ Period Tracker</button></div>}
+        <div className="calendar-personal-tools">
+          <Sticker className="sticker-sammy" src={publicAsset('assets/sticker-sammy.jpeg')} alt="Relax candle character sticker" />
+          {props.onPeriodTracker && <button className="paper-button period-entry" onClick={props.onPeriodTracker}>✿ Period Tracker</button>}
+        </div>
         <header className="calendar-header">
           <div className="today-copy"><p className="eyebrow">Deena’s daily planner</p><h1>{day.hasSame(today,'day')?'Today':day.toFormat('cccc')} <span>♥</span></h1><p>“One step today, closer to the life we’re building.”</p></div>
           <MiniMonthCalendar selected={day} today={today} onSelect={props.onSelectDay} />
