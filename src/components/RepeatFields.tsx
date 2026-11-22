@@ -27,24 +27,29 @@ export function RepeatFields({ choice, onChoose, custom, onCustom, date, oneTime
 }) {
   const weekday = DateTime.fromISO(date).weekday;
   return <>
-    <label>Repeat<select value={choice} onChange={event => onChoose(event.target.value as RepeatChoice)}>
+    <label>Repeat every<select value={choice} onChange={event => onChoose(event.target.value as RepeatChoice)}>
       {oneTime && <option value="none">Does not repeat</option>}
       {Object.entries(FREQUENCIES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       <option value="custom">Custom</option>
     </select></label>
     {choice === 'custom' && <>
       <div className="field-pair">
-        <label>Repeat every<input type="number" min="1" max="999" step="1" required value={custom.interval || ''}
+        <label>Repeat interval<input type="number" min="1" max="999" step="1" required value={custom.interval || ''}
           onChange={event => onCustom({ ...custom, interval: Number(event.target.value) })} /></label>
         <label>Frequency<select value={custom.frequency} onChange={event => onCustom({ ...custom, frequency: event.target.value as RepeatFrequency })}>
           {Object.entries(UNITS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
       </div>
-      {custom.frequency === 'weekly' && <WeekdayPicker days={custom.weekdays.length || !weekday ? custom.weekdays : [weekday]}
-        onChange={weekdays => onCustom({ ...custom, weekdays })} requireDay />}
       {(custom.frequency === 'monthly' || custom.frequency === 'yearly') && <p className="repeat-hint">The start date sets the day of the month for each occurrence.</p>}
-      <label>Ends on (optional)<input type="date" min={date || undefined} value={custom.endDate}
-        onChange={event => onCustom({ ...custom, endDate: event.target.value })} /></label>
+    </>}
+    {(choice === 'weekly' || (choice === 'custom' && custom.frequency === 'weekly')) && <WeekdayPicker
+      days={custom.weekdays.length || !weekday ? custom.weekdays : [weekday]}
+      onChange={weekdays => onCustom({ ...custom, weekdays })} requireDay />}
+    {choice !== 'none' && <>
+      <label className="check-label"><input type="checkbox" checked={!custom.endDate}
+        onChange={event => onCustom({ ...custom, endDate: event.target.checked ? '' : date })} />No end date</label>
+      {custom.endDate && <label>Ends on<input type="date" required min={date || undefined} value={custom.endDate}
+        onChange={event => onCustom({ ...custom, endDate: event.target.value })} /></label>}
     </>}
   </>;
 }
@@ -53,8 +58,8 @@ export function repeatSettings(choice: Exclude<RepeatChoice, 'none'>, custom: Cu
   const pattern = choice === 'custom' ? custom.frequency : choice;
   return {
     pattern, startDate,
-    weekdays: choice === 'custom' && pattern === 'weekly' ? custom.weekdays : [],
+    weekdays: pattern === 'weekly' ? custom.weekdays : [],
     interval: choice === 'custom' ? custom.interval : 1,
-    endDate: choice === 'custom' ? custom.endDate || undefined : undefined,
+    endDate: custom.endDate || undefined,
   };
 }

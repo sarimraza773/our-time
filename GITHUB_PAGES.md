@@ -113,3 +113,8 @@ The current working copy has no configured Supabase URL/key, and this task does 
 When source review, Pages settings, build variables and Supabase URL Configuration are approved, open **Actions → Test, build and deploy Our Time to Pages → Run workflow → Branch: main → Run workflow**. Approve the environment gate if configured. Confirm tests/build/upload/deploy all finish successfully. Visit the returned HTTPS URL and perform section 7 before calling the hosted app verified.
 
 The workflow installs dependencies from the lockfile, runs all tests, validates public variables and builds. It never runs Supabase migrations or changes Auth/Storage settings. No automatic deployment has been triggered by this preparation.
+
+
+## November 22 calendar and private tracker update
+
+See [PERIOD_TRACKER.md](PERIOD_TRACKER.md) for model limitations, the two new additive migrations, their exact review/application workflow and the hosted privacy/viewport acceptance checklist. November 21 is already applied: do not replay it or repair history for this update. The tracker is private to the authenticated Deena profile through RLS, and no health records belong in a source export. Source push, Pages deployment and production migrations still require explicit approval.

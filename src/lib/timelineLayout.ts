@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import type { CalendarEvent, TimeSlot } from '../types';
 import { dayWindow } from './calendar';
-import { EVENT_COLORS, PINK_SHADES } from './eventColors';
+import { eventFill, PINK_SHADES } from './eventColors';
 
 export type TimelineSpan = { top: number; bottom: number };
 type PositionedEvent = TimelineSpan & { event: CalendarEvent };
@@ -27,12 +27,12 @@ export function layoutTimelineEvents(events: PositionedEvent[]) {
 
   function finishGroup() {
     const group = items.slice(groupStart);
-    const manual = new Set(group.flatMap(({ event }) => event.color ? [EVENT_COLORS[event.color].fill] : []));
+    const manual = new Set(group.flatMap(({ event }) => event.color ? [eventFill(event.color)!] : []));
     const automatic = [...PINK_SHADES.filter(shade => !manual.has(shade)), ...PINK_SHADES.filter(shade => manual.has(shade))];
     const automaticLanes = [...new Set(group.filter(({ event }) => !event.color).map(item => item.lane))].sort((a, b) => a - b);
     for (const item of group) {
       item.laneCount = laneEnds.length;
-      item.fill = item.event.color ? EVENT_COLORS[item.event.color].fill
+      item.fill = item.event.color ? eventFill(item.event.color)
         : item.laneCount > 1 ? automatic[automaticLanes.indexOf(item.lane) % automatic.length] : undefined;
     }
     laneEnds.length = 0;

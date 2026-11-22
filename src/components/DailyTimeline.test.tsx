@@ -43,14 +43,14 @@ describe('daily timeline', () => {
   });
 
   it('renders 24 hourly labels, early events and an accurate Now marker', () => {
-    const { container } = show(['04:00', '05:00', '06:00'].map((start, index) =>
-      localSlot(`Early ${index}`, at(start), at(start.replace(':00', ':15')))));
+    const { container } = show(['01:00','02:30','03:00','04:00','05:00','06:00'].map((start, index) =>
+      localSlot(`Early ${index}`, at(start), at(DateTime.fromISO(at(start)).plus({minutes:15}).toFormat('HH:mm')))));
     const labels = [...container.querySelectorAll('.hour-labels span')].map(label => label.textContent);
     expect(labels).toHaveLength(24);
     expect(labels.slice(0, 7)).toEqual(['12 AM', '1 AM', '2 AM', '3 AM', '4 AM', '5 AM', '6 AM']);
     expect(labels.at(-1)).toBe('11 PM');
     expect(container.querySelector<HTMLElement>('.now-line')?.style.top).toBe('18.75%');
-    expect(screen.getAllByRole('button', { name: /Edit Early/ })).toHaveLength(3);
+    expect(screen.getAllByRole('button', { name: /Edit Early/ })).toHaveLength(6);
   });
 
   it('clips a long event at midnight and keeps a five-minute duration exact', () => {

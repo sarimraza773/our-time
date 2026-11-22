@@ -23,7 +23,8 @@ export interface User {
 
 export type RepeatFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
 export type RecurrencePattern = RepeatFrequency | 'weekdays' | 'custom';
-export type EventColor = 'blush' | 'rose' | 'peony' | 'mauve' | 'shell' | 'berry';
+export type PresetEventColor = 'blush' | 'rose' | 'peony' | 'mauve' | 'shell' | 'berry';
+export type EventColor = PresetEventColor | `#${string}`;
 
 export interface RecurringRule {
   id: string;

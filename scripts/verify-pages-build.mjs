@@ -18,10 +18,15 @@ for (const file of assets.filter(name => name.endsWith('.css'))) {
   const css = await readFile(resolve(dist, 'assets', file), 'utf8');
   for (const match of css.matchAll(/url\(\s*["']?([^"')\s]+)["']?\s*\)/g)) await checkUrl(match[1]);
 }
+let applicationJs = '';
 for (const file of assets.filter(name => name.endsWith('.js'))) {
   const js = await readFile(resolve(dist, 'assets', file), 'utf8');
+  applicationJs += js;
   ensure(!/["'`]\/assets\//.test(js), 'Runtime JavaScript contains an unprefixed /assets/ URL.');
-  ensure(!js.includes('LOCAL QA FIXTURE') && !js.includes('our-time-disposable-journal-qa'), 'QA fixture leaked into the production build.');
+  ensure(!js.includes('LOCAL QA FIXTURE') && !js.includes('our-time-disposable-journal-qa') && !js.includes('Synthetic local QA'), 'QA fixture leaked into the production build.');
+}
+for (const control of ['Recurring event', 'Event Color', 'Custom color', 'Period Tracker', 'All 24 hours']) {
+  ensure(applicationJs.includes(control), `Production bundle is missing required control: ${control}`);
 }
 const artwork = ['botanical-frame.png', 'sticker-sammy.jpeg', 'sticker-rupert.jpeg', 'sticker-chadwick.jpeg', 'sticker-carlisle.jpeg'];
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');

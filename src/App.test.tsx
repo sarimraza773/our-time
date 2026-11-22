@@ -100,17 +100,17 @@ describe('existing UI with the cloud hook boundary mocked', () => {
     await waitFor(() => expect(view.container.querySelector('.live-card.sarim .live-activity strong')?.textContent).toBe('Free'));
   });
 
-  it.each(['04:00', '05:00', '06:00'])('creates a one-time event at %s with the selected color', async start => {
+  it.each(['01:00','02:00','03:00','04:00','05:00','06:00'])('creates a one-time event at %s with the selected color', async start => {
     controls.auth.session = { user: { id: users.deena } };
     const save = vi.fn(async (_event: CalendarEvent, _existing: boolean) => true);
     controls.cloud.saveEvent = save;
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: '＋ New event' }));
-    expect((screen.getByLabelText('Repeat') as HTMLSelectElement).value).toBe('none');
+    expect((screen.getByLabelText('Recurring event') as HTMLInputElement).checked).toBe(false);
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Early appointment' } });
     fireEvent.change(screen.getByLabelText('Start'), { target: { value: start } });
     fireEvent.change(screen.getByLabelText('End'), { target: { value: start.replace(':00', ':15') } });
-    fireEvent.change(screen.getByLabelText('Color'), { target: { value: 'berry' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Dusty pink' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save event ✦' }));
     await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ color: 'berry', isRecurring: false }), false));
     const saved = save.mock.calls[0][0];
@@ -124,13 +124,15 @@ describe('existing UI with the cloud hook boundary mocked', () => {
     fireEvent.click(screen.getByRole('button', { name: '＋ New event' }));
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Recurring appointment' } });
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-08-26' } });
-    fireEvent.change(screen.getByLabelText('Repeat'), { target: { value: pattern } });
+    fireEvent.click(screen.getByLabelText('Recurring event'));
+    fireEvent.change(screen.getByLabelText('Repeat every'), { target: { value: pattern } });
     if (pattern === 'custom') {
-      fireEvent.change(screen.getByLabelText('Repeat every'), { target: { value: '2' } });
+      fireEvent.change(screen.getByLabelText('Repeat interval'), { target: { value: '2' } });
       fireEvent.click(screen.getByRole('button', { name: 'Friday' }));
-      fireEvent.change(screen.getByLabelText('Ends on (optional)'), { target: { value: '2026-09-30' } });
+      fireEvent.click(screen.getByLabelText('No end date'));
+      fireEvent.change(screen.getByLabelText('Ends on'), { target: { value: '2026-09-30' } });
     }
-    fireEvent.change(screen.getByLabelText('Color'), { target: { value: 'rose' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Rose pink' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save event ✦' }));
     await waitFor(() => expect(controls.cloud.saveRule).toHaveBeenCalledWith(expect.objectContaining({
       title: 'Recurring appointment', startDate: '2026-08-26', color: 'rose', timezone: 'America/New_York',
@@ -139,6 +141,15 @@ describe('existing UI with the cloud hook boundary mocked', () => {
         : { pattern, interval: 1 }),
     }), false));
     expect(controls.cloud.saveEvent).not.toHaveBeenCalled();
+  });
+
+  it('shows the private tracker entry only for the authenticated Deena profile, not the perspective', () => {
+    const view = render(<App />);
+    expect(screen.queryByRole('button', {name: '✿ Period Tracker'})).toBeNull();
+    controls.auth.session = {user: {id: users.deena}}; view.rerender(<App />);
+    expect(screen.getByRole('button', {name: '✿ Period Tracker'})).toBeTruthy();
+    controls.auth.session = {user: {id: 'unknown-user'}}; view.rerender(<App />);
+    expect(screen.queryByRole('button', {name: '✿ Period Tracker'})).toBeNull();
   });
 
   it('opens the series editor from an occurrence and preserves its repeat settings', async () => {
@@ -154,9 +165,9 @@ describe('existing UI with the cloud hook boundary mocked', () => {
     expect((screen.getByLabelText('Start') as HTMLInputElement).value).toBe('04:15');
     fireEvent.click(screen.getByRole('button', { name: 'Edit series' }));
     await screen.findByRole('heading', { name: 'Edit schedule' });
-    expect((screen.getByLabelText('Repeat every') as HTMLInputElement).value).toBe('2');
+    expect((screen.getByLabelText('Repeat interval') as HTMLInputElement).value).toBe('2');
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Event details' })).toBeNull());
-    expect((screen.getByLabelText('Color') as HTMLSelectElement).value).toBe('peony');
+    expect(screen.getByRole('button', { name: 'Lavender pink' }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'Save schedule' }));
     await waitFor(() => expect(controls.cloud.saveRule).toHaveBeenCalledWith(expect.objectContaining({
       id: 'daily-series', pattern: 'daily', interval: 2, startDate, color: 'peony',

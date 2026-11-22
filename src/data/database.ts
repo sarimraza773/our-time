@@ -1,3 +1,4 @@
+import type { PeriodEntry, CycleSettings } from '../lib/period';
 import type { EventCategory, EventColor, OwnerId, RecurrencePattern } from '../types';
 import type { Memory, Contribution } from '../lib/photobooth';
 import type { BookTitle, BookKey, DiaryEntry } from '../lib/journal';
@@ -31,6 +32,8 @@ type Table<Row, Insert> = { Row: Row; Insert: Insert; Update: Partial<Insert>; R
 export type Database = {
   public: {
     Tables: {
+      period_entries: Table<PeriodEntry, Omit<PeriodEntry, 'updated_at'>>;
+      cycle_settings: Table<CycleSettings, Omit<CycleSettings, 'updated_at'>>;
       bookshelf_titles: Table<BookTitle, { calendar_id: string; book_key: BookKey; title: string }>;
       diary_entries: Table<Omit<DiaryEntry, 'formatting'> & { formatting: Json }, { id: string; calendar_id: string; title: string; content: string; formatting: Json }>;
       photo_memories: Table<Omit<Memory, 'stickers'> & { stickers: Json }, never>;
@@ -44,6 +47,8 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      is_private_cycle_owner: { Args: Record<string, never>; Returns: boolean };
+      delete_my_cycle_data: { Args: Record<string, never>; Returns: undefined };
       load_shared_journal: { Args: { p_calendar_id: string }; Returns: Json };
       load_photo_memories: { Args: { p_calendar_id: string }; Returns: Json };
       save_photo_contribution: { Args: { p_memory: Json; p_paths: string[] }; Returns: undefined };

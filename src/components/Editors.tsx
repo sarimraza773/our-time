@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { motion } from 'framer-motion';
 import { DateTime } from 'luxon';
 import type { CalendarEvent, EventCategory, EventColor, OwnerId, RecurringRule, RepeatFrequency } from '../types';
-import { EVENT_COLORS } from '../lib/eventColors';
+import { EVENT_COLORS, eventFill } from '../lib/eventColors';
 import { DEFAULT_CUSTOM, RepeatFields, repeatSettings, WeekdayPicker, type RepeatChoice } from './RepeatFields';
 
 const CATEGORIES: { value: EventCategory; label: string }[] = [
@@ -21,11 +21,16 @@ function OwnerCategoryFields({ owner, category, onOwner, onCategory }: {
 }
 
 function ColorField({ color, onChange }: { color?: EventColor; onChange: (color?: EventColor) => void }) {
-  return <label>Color<select value={color ?? ''} style={color ? { backgroundColor: EVENT_COLORS[color].fill } : undefined}
-    onChange={event => onChange((event.target.value || undefined) as EventColor | undefined)}>
-    <option value="">Automatic</option>
-    {Object.entries(EVENT_COLORS).map(([value, { label }]) => <option key={value} value={value}>{label}</option>)}
-  </select></label>;
+  return <fieldset className="event-palette"><legend>Event Color</legend>
+    <div className="color-swatches"><button type="button" aria-pressed={!color} onClick={() => onChange()}>Automatic</button>
+      {Object.entries(EVENT_COLORS).map(([value, item]) => <button key={value} type="button" title={item.label}
+        aria-label={item.label} aria-pressed={color === value} style={{ background: item.fill }}
+        onClick={() => onChange(value as EventColor)}>{color === value ? '✓' : ''}</button>)}
+    </div>
+    <label>Custom color<input type="color" value={eventFill(color) ?? '#f6c2d0'}
+      onChange={event => onChange(event.target.value as EventColor)} /></label>
+    <p className="repeat-hint">{color ? 'Your chosen color is saved for both of you.' : 'Automatic shades distinguish overlapping events.'}</p>
+  </fieldset>;
 }
 
 const blankEvent = (day: DateTime, ownerId: OwnerId, zone: string): CalendarEvent => {
@@ -107,7 +112,7 @@ export function EventEditor({ event, day, ownerId, zone, pending = false, error 
 
   return <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
     onMouseDown={event => { if (event.currentTarget === event.target) onClose(); }}>
-    <motion.form className="editor-card" initial={{ opacity: 0, y: 24, scale: .97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+    <motion.form className="editor-card" role="dialog" aria-modal="true" aria-label="Event editor" initial={{ opacity: 0, y: 24, scale: .97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 18, scale: .98 }} onSubmit={submit}>
       <fieldset className="editor-fields" disabled={pending}>
         <header><div><p className="eyebrow">{event?.isRecurring ? 'This occurrence' : event ? 'Edit this moment' : 'Add to the day'}</p>
@@ -125,7 +130,10 @@ export function EventEditor({ event, day, ownerId, zone, pending = false, error 
           <label>End<input type="time" required value={timing.endTime}
             onChange={event => setTiming({ ...timing, endTime: event.target.value, offset: timing.offset > 1 ? timing.offset : 0 })} /></label>
         </div>
-        {!event && <RepeatFields choice={repeat} onChoose={setRepeat} custom={custom} onCustom={setCustom} date={timing.date} oneTime />}
+        <label className="check-label"><input type="checkbox" checked={!!event?.isRecurring || repeat !== 'none'}
+          disabled={!!event} onChange={e => setRepeat(e.target.checked ? 'weekly' : 'none')} />Recurring event</label>
+        {!event && repeat !== 'none' && <div className="recurrence-settings"><RepeatFields choice={repeat} onChoose={setRepeat} custom={custom} onCustom={setCustom} date={timing.date} /></div>}
+        {event?.isRecurring && <p className="repeat-hint">Saving changes only this occurrence. Use Edit series for its repeat settings.</p>}
         <ColorField color={draft.color} onChange={color => setDraft({ ...draft, color })} />
         <label>Notes<textarea value={draft.notes} onChange={event => setDraft({ ...draft, notes: event.target.value })} placeholder="Optional little details…" /></label>
         {draft.category === 'study' && <label className="check-label"><input type="checkbox" checked={draft.openToStudyTogether}

@@ -1,6 +1,7 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useMemo, useRef, type CSSProperties } from 'react';
 import { DateTime } from 'luxon';
 import { motion } from 'framer-motion';
+import { eventText } from '../lib/eventColors';
 import type { CalendarEvent, TimeSlot } from '../types';
 import { convertTimezone, formatRange } from '../lib/calendar';
 import { layoutTimelineEvents, timelineScale, type TimelineSpan } from '../lib/timelineLayout';
@@ -30,11 +31,12 @@ function TimelineEvent({ placement, zone, onEdit, column }: { placement: PlacedE
     '--lane-start': percent(lane / laneCount),
     '--lane-end': percent((laneCount - lane - 1) / laneCount),
     '--event-fill': fill,
+    '--event-text': eventText(fill),
   } as CSSProperties;
   const localStart = convertTimezone(event.startUtc, zone);
   const localEnd = convertTimezone(event.endUtc, zone);
   const samePeriod = (localStart.hour < 12) === (localEnd.hour < 12);
-  const details = `${event.title}, ${formatRange(event, zone)}`;
+  const details = `${event.title}, ${formatRange(event, zone)}, ${event.ownerId === 'deena' ? 'Deena' : 'Sarim'}`;
 
   return (
     <motion.button type="button" className={`timeline-event ${column} category-${event.category}${fill ? ' tinted' : ''}`}
@@ -42,6 +44,7 @@ function TimelineEvent({ placement, zone, onEdit, column }: { placement: PlacedE
       title={details} aria-label={`Edit ${details}`}>
       <span className="timeline-copy">
         <strong>{event.category === 'study' && event.openToStudyTogether ? '☑ ' : ''}{event.title}</strong>
+        <span className="event-owner">{event.ownerId === 'deena' ? 'Deena' : 'Sarim'}</span>
         <small>{localStart.toFormat(samePeriod ? 'h:mm' : 'h:mm a')}–{localEnd.toFormat('h:mm a')}</small>
       </span>
       {event.ownerId === 'sarim' && <TimezoneTooltip event={event} zone={zone} />}
@@ -90,6 +93,12 @@ export function DailyTimeline({ day, nowUtc, events, mutualSlots, studySlots, zo
   day: DateTime; nowUtc: DateTime; events: CalendarEvent[]; mutualSlots: TimeSlot[]; studySlots: TimeSlot[];
   zone: string; onEdit: (event: CalendarEvent) => void; onAdd: () => void;
 }) {
+  const scroll = useRef<HTMLDivElement>(null);
+  const jump = (hour: number) => {
+    const node = scroll.current;
+    const canvas = node?.querySelector<HTMLElement>('.timeline-canvas');
+    if (node && canvas) node.scrollTop = canvas.offsetTop + canvas.offsetHeight * hour / 24;
+  };
   const scale = useMemo(() => timelineScale(day, zone), [day, zone]);
   const columns = useMemo(() => placeEvents(events, scale.clip), [events, scale]);
   const lanes = Math.max(1, ...Object.values(columns).flatMap(items => items.map(item => item.laneCount)));
@@ -103,7 +112,8 @@ export function DailyTimeline({ day, nowUtc, events, mutualSlots, studySlots, zo
 
   return (
     <section className="timeline" aria-label="Daily schedule">
-      <div className={`timeline-scroll${lanes >= 3 ? ' has-overlaps' : ''}`}>
+      <nav className="timeline-jumps" aria-label="Jump to time"><span>All 24 hours</span><button onClick={() => jump(0)}>Midnight</button><button onClick={() => jump(6)}>6 AM</button><button onClick={() => jump(12)}>Noon</button><button onClick={() => jump(23)}>11 PM</button></nav>
+      <div ref={scroll} tabIndex={0} aria-label="Scrollable 24-hour schedule" className={`timeline-scroll${lanes >= 3 ? ' has-overlaps' : ''}`}>
         <div className="timeline-grid" style={{ '--lane-count': lanes } as CSSProperties}>
           <div className="timeline-head"><span>Time <small>MYT</small></span><span>Deena</span><span>Together</span><span>Sarim</span></div>
           <div className="timeline-canvas">
@@ -111,7 +121,7 @@ export function DailyTimeline({ day, nowUtc, events, mutualSlots, studySlots, zo
             {now >= 0 && now < 1 && <div className="now-line" style={{ top: percent(now) }} aria-hidden="true"><i /><span>Now</span></div>}
             <div className="timeline-column deena-col">{renderEvents('deena')}</div>
             <div className="timeline-column together-col">
-              {renderSlots(mutualSlots).slice(0, 6)}
+              {renderSlots(mutualSlots)}
               {renderSlots(studySlots, true)}
               {renderEvents('together')}
             </div>

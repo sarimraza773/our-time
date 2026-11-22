@@ -129,3 +129,26 @@
 @media(max-width:720px){.sync-note{bottom:72px;right:9px;font-size:10px;max-width:calc(100vw - 18px)}.sync-note small{font-size:9px}.editor-fields .field-pair{grid-template-columns:1fr}}
 
 .repeat-hint{margin:0 0 13px;font-size:11px;color:#705344}.edit-series{margin-top:5px;padding:5px 8px;border:1px solid rgba(117,82,59,.25);border-radius:7px;background:transparent;font-size:11px}.weekday-picker button:disabled[aria-pressed=true]{opacity:1}
+
+/* Calendar controls share one scroll surface at every viewport size. */
+.timeline{display:flex;flex-direction:column;min-height:0}
+.timeline-jumps{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:7px;background:#fff4e2;border-bottom:1px solid #75523b30;font-size:12px}
+.timeline-jumps span{margin-right:auto}.timeline-jumps button{border:1px solid #75523b40;border-radius:12px;background:#f9dbe5;padding:4px 8px;font-size:12px}
+.timeline-scroll{flex:1;min-height:0;height:auto;overflow:auto;overscroll-behavior:contain}
+.timeline-canvas{border-top:1px solid #75523b25}
+.timeline-canvas>.hour-labels span{padding-top:0;transform:translateY(-.1em)}
+.timeline-event.tinted{color:var(--event-text);opacity:1}.event-owner{font-size:9px;line-height:1.2;opacity:.85}
+.timeline-event[data-density="compact"] .event-owner,.timeline-event[data-density="tiny"] .event-owner{display:none}
+.timeline-grid{min-width:calc(var(--time-gutter) + 3 * var(--lane-count) * 54px)}
+.event-palette{min-width:0;border:1px solid #75523b35;border-radius:10px;margin:12px 0;padding:12px}
+.event-palette legend{font:600 14px Georgia,serif}.color-swatches{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.color-swatches button{min-width:34px;height:34px;border:1px solid #75523b55;border-radius:50%;color:#3d2d26}.color-swatches button:first-child{border-radius:14px;font-size:12px}
+.color-swatches button[aria-pressed=true]{outline:2px solid #75523b;outline-offset:2px}
+.event-palette label{display:flex;align-items:center;gap:12px;font-size:14px}.event-palette input[type=color]{width:64px;height:38px;padding:3px}
+.recurrence-settings{border-left:3px solid #e9a6bd;padding:10px 12px;margin-bottom:14px;background:#f9dbe530}
+.recurrence-settings>label{display:grid;gap:6px;margin:10px 0;font-size:14px}.editor-card input,.editor-card select,.editor-card textarea{min-width:0}
+.editor-card .check-label{font-size:14px}.weekday-picker{min-width:0}.weekday-picker button{width:30px;height:34px;margin-right:3px}
+@media(max-width:720px){.timeline{height:min(75dvh,720px);min-height:360px;overflow:hidden}.timeline-scroll,.timeline-scroll.has-overlaps{height:auto;overflow:auto}.timeline-head,.timeline-scroll.has-overlaps .timeline-head{position:sticky;top:0}.timeline-grid{padding-bottom:30px}.timeline-jumps{gap:4px}.timeline-jumps span{flex-basis:100%}.editor-card input,.editor-card select,.editor-card textarea{font-size:16px}}
+
+/* Size the scrollable planner from the actual header, including personal tools. */
+@media(min-width:721px){.calendar-paper,.fullscreen .calendar-paper{display:flex;flex-direction:column}.calendar-header,.date-row{flex:none}.planner-grid,.fullscreen .planner-grid{flex:1;min-height:0;height:auto}}

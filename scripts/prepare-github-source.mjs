@@ -5,10 +5,10 @@ import { checkPublicSource } from './check-public-source.mjs';
 const root = process.cwd();
 const files = [
   '.gitignore', '.env.example', '.github/workflows/deploy-pages.yml', 'index.html', 'package.json', 'package-lock.json',
-  'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'vite.config.ts', 'GITHUB_PAGES.md',
+  'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'vite.config.ts', 'GITHUB_PAGES.md', 'PERIOD_TRACKER.md',
   'scripts/check-public-source.mjs', 'scripts/check-public-source.test.mjs', 'scripts/prepare-github-source.mjs', 'scripts/verify-pages-build.mjs', 'scripts/preview-pages.mjs', 'scripts/verify-supabase.mjs',
   'public/favicon.svg', ...['botanical-frame.png','sticker-sammy.jpeg','sticker-rupert.jpeg','sticker-chadwick.jpeg','sticker-carlisle.jpeg'].map(name => `public/assets/${name}`),
-  ...['202609260001_shared_calendar.sql','202610190001_photobooth.sql','202611170001_shared_diary.sql','202611210001_event_colors_and_repeats.sql'].map(name => `supabase/migrations/${name}`), 'supabase/verify-security.sql',
+  ...['202609260001_shared_calendar.sql','202610190001_photobooth.sql','202611170001_shared_diary.sql','202611210001_event_colors_and_repeats.sql','202611220001_custom_event_colors.sql','202611220002_private_period_tracker.sql'].map(name => `supabase/migrations/${name}`), 'supabase/verify-security.sql',
 ];
 async function collect(directory) {
   for (const entry of await readdir(resolve(root, directory), { withFileTypes: true })) {

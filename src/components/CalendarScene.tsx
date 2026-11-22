@@ -13,6 +13,7 @@ import { publicAsset } from '../lib/assets';
 
 interface CalendarSceneProps {
   bookshelf?: ReactNode;
+  onPeriodTracker?: () => void;
   perspective: 'deena'; authenticatedPerson: OwnerId; day: DateTime; today: DateTime; nowUtc: DateTime; deenaStatus: CurrentScheduleStatus; sarimStatus: CurrentScheduleStatus; events: CalendarEvent[]; rules: RecurringRule[];
   mutualSlots: TimeSlot[]; studySlots: TimeSlot[]; botMessages: BotMessage[]; isFullscreen: boolean;
   drawer: 'schedule'|'bot'|null; toast: string; onSelectDay:(day:DateTime)=>void; onToday:()=>void;
@@ -33,6 +34,7 @@ export function HangingCalendar(props: CalendarSceneProps) {
       </div>
       <div className="calendar-paper">
         <Sticker className="sticker-sammy" src={publicAsset('assets/sticker-sammy.jpeg')} alt="Relax candle character sticker" />
+        {props.onPeriodTracker && <div className="calendar-personal-tools"><button className="paper-button period-entry" onClick={props.onPeriodTracker}>✿ Period Tracker</button></div>}
         <header className="calendar-header">
           <div className="today-copy"><p className="eyebrow">Deena’s daily planner</p><h1>{day.hasSame(today,'day')?'Today':day.toFormat('cccc')} <span>♥</span></h1><p>“One step today, closer to the life we’re building.”</p></div>
           <MiniMonthCalendar selected={day} today={today} onSelect={props.onSelectDay} />

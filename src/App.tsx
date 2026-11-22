@@ -22,6 +22,8 @@ import { createJournalRepository } from './data/journalRepository';
 import { useSharedJournal } from './hooks/useSharedJournal';
 import { Bookshelf } from './components/Bookshelf';
 import { SharedDiary } from './components/SharedDiary';
+import { PeriodTracker } from './components/PeriodTracker';
+import { createPeriodRepository } from './data/periodRepository';
 
 export default function App() {
   const auth = useAuth();
@@ -34,6 +36,8 @@ export default function App() {
 function SharedPlanner({ authenticatedUserId, onSignOut, authError }: { authenticatedUserId: string; onSignOut: () => Promise<void>; authError: string }) {
   const cloud = useSharedCalendar(authenticatedUserId);
   const [photobooth, setPhotobooth] = useState(false);
+  const [period, setPeriod] = useState(false);
+  const periodRepository = useMemo(() => supabase ? createPeriodRepository(supabase) : null, []);
   const [diary, setDiary] = useState(false);
   const closeDiary = useCallback(() => setDiary(false), []);
   const journalRepository = useMemo(() => supabase ? createJournalRepository(supabase) : null, []);
@@ -42,6 +46,7 @@ function SharedPlanner({ authenticatedUserId, onSignOut, authError }: { authenti
   const memoryRepository = useMemo(() => supabase ? createMemoryRepository(supabase) : null, []);
   // Visual perspective is independent from the authenticated UUID and profile.
   const selectedPerspective: OwnerId = 'deena';
+  const trackerAllowed = cloud.snapshot?.profiles.find(p => p.id === authenticatedUserId)?.person_key === 'deena';
   const person = cloud.snapshot?.profiles.find(p => p.id === authenticatedUserId)?.person_key ?? 'deena';
   const nowUtc = useCurrentTime();
   const today = nowUtc.setZone(DEENA_TIMEZONE).startOf('day');
@@ -59,10 +64,10 @@ function SharedPlanner({ authenticatedUserId, onSignOut, authError }: { authenti
     const listener = (event: KeyboardEvent) => {
       const typing = (event.target as HTMLElement)?.matches?.('input,textarea,select,[contenteditable=true]');
       if (event.key === 'Escape' && !cloud.saving) { setFullscreen(false); setDrawer(null); setEventEditor({ open: false }); setRuleEditor({ open: false }); cloud.cancelImport(); }
-      if (event.key.toLowerCase() === 'f' && !typing && !photobooth && !diary) { event.preventDefault(); setFullscreen(value => !value); }
+      if (event.key.toLowerCase() === 'f' && !typing && !photobooth && !diary && !period) { event.preventDefault(); setFullscreen(value => !value); }
     };
     addEventListener('keydown', listener); return () => removeEventListener('keydown', listener);
-  }, [cloud.saving, photobooth, diary]);
+  }, [cloud.saving, photobooth, diary, period]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 2600); return () => clearTimeout(timer); }, [toast]);
 
   const dayEvents = useMemo(() => {
@@ -99,8 +104,8 @@ function SharedPlanner({ authenticatedUserId, onSignOut, authError }: { authenti
     {authError && <p role="alert">{authError}</p>}<button className="paper-button" onClick={cloud.retry}>Retry</button> <button className="paper-button" onClick={onSignOut}>Sign Out</button></PaperPage>;
 
   return <>
-    <div inert={photobooth || diary}>
-    <CalendarScene bookshelf={<Bookshelf books={journal.books} loading={journal.loading} saving={journal.saving} error={journal.loadError || journal.saveError} onSave={journal.saveBook} onOpen={() => setDiary(true)} onRefresh={journal.refresh} />} perspective={selectedPerspective} authenticatedPerson={person} day={day} today={today} nowUtc={nowUtc} deenaStatus={deenaStatus} sarimStatus={sarimStatus} events={dayEvents} rules={rules} mutualSlots={mutualSlots} studySlots={studySlots} botMessages={botMessages} isFullscreen={fullscreen} drawer={drawer} toast={toast}
+    <div inert={photobooth || diary || period}>
+    <CalendarScene onPeriodTracker={trackerAllowed ? () => setPeriod(true) : undefined} bookshelf={<Bookshelf books={journal.books} loading={journal.loading} saving={journal.saving} error={journal.loadError || journal.saveError} onSave={journal.saveBook} onOpen={() => setDiary(true)} onRefresh={journal.refresh} />} perspective={selectedPerspective} authenticatedPerson={person} day={day} today={today} nowUtc={nowUtc} deenaStatus={deenaStatus} sarimStatus={sarimStatus} events={dayEvents} rules={rules} mutualSlots={mutualSlots} studySlots={studySlots} botMessages={botMessages} isFullscreen={fullscreen} drawer={drawer} toast={toast}
       onSelectDay={setDay} onToday={() => { setDay(DateTime.now().setZone(DEENA_TIMEZONE).startOf('day')); setToast('Back to today 🌸'); }}
       onEditEvent={event => { cloud.clearError(); setEventEditor({ open: true, event }); }} onAddEvent={() => { cloud.clearError(); setEventEditor({ open: true }); }}
       onToggleRule={id => { const rule = rules.find(r => r.id === id); if (rule) void cloud.saveRule({ ...rule, active: !rule.active }, true); }}
@@ -125,6 +130,7 @@ function SharedPlanner({ authenticatedUserId, onSignOut, authError }: { authenti
     <AnimatePresence>{ruleEditor.open && <RecurringScheduleEditor rule={ruleEditor.rule} ownerId={person} pending={cloud.saving} error={cloud.error} onSave={saveRule} onClose={() => { if (!cloud.saving) setRuleEditor({ open: false }); }} />}</AnimatePresence>
     </div>
     {photobooth && memoryRepository && <Photobooth repository={memoryRepository} calendarId={cloud.snapshot.calendar.id} userId={authenticatedUserId} person={person} onClose={closePhotobooth} />}
+    {period && trackerAllowed && periodRepository && <PeriodTracker repository={periodRepository} userId={authenticatedUserId} today={today.toISODate()!} onClose={() => setPeriod(false)} />}
     {diary && <SharedDiary journal={journal} profiles={cloud.snapshot.profiles} onClose={closeDiary} />}
   </>;
 }
