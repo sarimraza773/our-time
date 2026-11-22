@@ -21,7 +21,9 @@ export interface User {
   color: string;
 }
 
-export type RecurrencePattern = 'daily' | 'weekdays' | 'weekly' | 'custom';
+export type RepeatFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type RecurrencePattern = RepeatFrequency | 'weekdays' | 'custom';
+export type EventColor = 'blush' | 'rose' | 'peony' | 'mauve' | 'shell' | 'berry';
 
 export interface RecurringRule {
   id: string;
@@ -33,6 +35,10 @@ export interface RecurringRule {
   endTime: string;
   pattern: RecurrencePattern;
   weekdays: number[];
+  startDate?: string;
+  endDate?: string;
+  interval?: number;
+  color?: EventColor;
   active: boolean;
   notes: string;
   openToStudyTogether: boolean;
@@ -47,6 +53,7 @@ export interface CalendarEvent {
   endUtc: string;
   timezone: string;
   notes: string;
+  color?: EventColor;
   isRecurring: boolean;
   recurrenceRule?: string;
   recurringRuleId?: string;

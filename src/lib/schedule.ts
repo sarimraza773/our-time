@@ -24,6 +24,25 @@ const intersects = (event: CalendarEvent, start: DateTime, end: DateTime) => {
 
 function occursOn(rule: RecurringRule, localDate: DateTime) {
   if (!rule.active) return false;
+  if (rule.startDate) {
+    const date = localDate.toISODate()!;
+    if (date < rule.startDate || (rule.endDate && date > rule.endDate)) return false;
+    // Compare calendar dates independently of the timezone's DST transitions.
+    const anchor = DateTime.fromISO(rule.startDate, { zone: 'utc' });
+    const day = DateTime.fromISO(date, { zone: 'utc' });
+    const interval = rule.interval ?? 1;
+    switch (rule.pattern) {
+      case 'daily':
+        return day.diff(anchor, 'days').days % interval === 0;
+      case 'weekly':
+        return day.startOf('week').diff(anchor.startOf('week'), 'weeks').weeks % interval === 0
+          && (rule.weekdays.length ? rule.weekdays.includes(day.weekday) : anchor.weekday === day.weekday);
+      case 'monthly':
+        return ((day.year - anchor.year) * 12 + day.month - anchor.month) % interval === 0 && day.day === anchor.day;
+      case 'yearly':
+        return (day.year - anchor.year) % interval === 0 && day.month === anchor.month && day.day === anchor.day;
+    }
+  }
   if (rule.pattern === 'daily') return true;
   if (rule.pattern === 'weekdays') return localDate.weekday <= 5;
   if (rule.pattern === 'weekly') return localDate.weekday === (rule.weekdays[0] ?? 1);
@@ -41,16 +60,18 @@ export function createRecurringInstances(
 
   for (const rule of rules) {
     let cursor = startUtc.setZone(rule.timezone).startOf('day').minus({ days: 1 });
-    const localEnd = endUtc.setZone(rule.timezone).endOf('day').plus({ days: 1 });
+    const localEnd = endUtc.setZone(rule.timezone).endOf('day');
 
     while (cursor <= localEnd) {
       if (occursOn(rule, cursor)) {
         const localDate = cursor.toISODate()!;
         const start = DateTime.fromISO(`${localDate}T${rule.startTime}`, { zone: rule.timezone });
-        let end = DateTime.fromISO(`${localDate}T${rule.endTime}`, { zone: rule.timezone });
-        if (end <= start) end = end.plus({ days: 1 });
+        // Build the next day's time in its own zone so an overnight recurrence
+        // retains its intended wall time across a clock change.
+        const endDate = rule.endTime <= rule.startTime ? cursor.plus({ days: 1 }).toISODate() : localDate;
+        const end = DateTime.fromISO(`${endDate}T${rule.endTime}`, { zone: rule.timezone });
 
-        if (start.isValid && end.isValid && end.toUTC() > startUtc && start.toUTC() < endUtc) {
+        if (start.isValid && end.isValid && end > start && end > startUtc && start < endUtc) {
           const stamp = start.toUTC().toISO()!;
           generated.push({
             id: `rule:${rule.id}:${localDate}`,
@@ -61,6 +82,7 @@ export function createRecurringInstances(
             endUtc: end.toUTC().toISO()!,
             timezone: rule.timezone,
             notes: rule.notes,
+            color: rule.color,
             isRecurring: true,
             recurrenceRule: rule.pattern,
             recurringRuleId: rule.id,

@@ -19,7 +19,7 @@ const utc = (value: string) => {
 };
 export function mapEventRow(row: EventRow): CalendarEvent {
   return { id: row.id, ownerId: row.owner_person_key, title: row.title, category: row.category,
-    startUtc: utc(row.start_utc), endUtc: utc(row.end_utc), timezone: row.timezone, notes: row.notes,
+    startUtc: utc(row.start_utc), endUtc: utc(row.end_utc), timezone: row.timezone, notes: row.notes, color: row.color ?? undefined,
     openToStudyTogether: row.open_to_study_together, isRecurring: false, editable: true,
     createdAt: utc(row.created_at), updatedAt: utc(row.updated_at) };
 }
@@ -28,7 +28,7 @@ export function eventContent(event: CalendarEvent, users: OwnerUsers): EventCont
   const start = utc(event.startUtc), end = utc(event.endUtc);
   if (end <= start) throw new Error('The event end must be after its start.');
   return { owner_user_id: users[event.ownerId], owner_person_key: event.ownerId, title: event.title,
-    category: event.category, start_utc: start, end_utc: end, timezone: event.timezone, notes: event.notes,
+    category: event.category, start_utc: start, end_utc: end, timezone: event.timezone, notes: event.notes, color: event.color ?? null,
     open_to_study_together: event.openToStudyTogether };
 }
 export function eventToWrite(event: CalendarEvent, calendarId: string, users: OwnerUsers): EventWrite {
@@ -37,14 +37,16 @@ export function eventToWrite(event: CalendarEvent, calendarId: string, users: Ow
 export function mapRuleRow(row: RuleRow): RecurringRule {
   return { id: row.id, ownerId: row.owner_person_key, title: row.title, category: row.category,
     timezone: row.timezone, startTime: row.local_start_time.slice(0, 5), endTime: row.local_end_time.slice(0, 5),
-    pattern: row.pattern, weekdays: row.weekdays, active: row.enabled, notes: row.notes,
+    pattern: row.pattern, weekdays: row.weekdays, active: row.enabled, notes: row.notes, color: row.color ?? undefined,
+    startDate: row.start_date ?? undefined, endDate: row.end_date ?? undefined, interval: row.start_date ? row.repeat_interval ?? 1 : undefined,
     openToStudyTogether: row.open_to_study_together };
 }
 export function ruleToWrite(rule: RecurringRule, calendarId: string, users: OwnerUsers): RuleWrite {
   return { id: rule.id, calendar_id: calendarId, owner_user_id: users[rule.ownerId], owner_person_key: rule.ownerId,
     title: rule.title, category: rule.category, timezone: rule.timezone, local_start_time: rule.startTime,
     local_end_time: rule.endTime, pattern: rule.pattern, weekdays: rule.weekdays, enabled: rule.active,
-    notes: rule.notes, open_to_study_together: rule.openToStudyTogether };
+    notes: rule.notes, open_to_study_together: rule.openToStudyTogether, color: rule.color ?? null,
+    start_date: rule.startDate ?? null, end_date: rule.endDate ?? null, repeat_interval: rule.interval ?? 1 };
 }
 export function parseOccurrenceId(id: string) {
   const match = /^rule:(.+):(\d{4}-\d{2}-\d{2})$/.exec(id);

@@ -1,4 +1,4 @@
-import type { EventCategory, OwnerId, RecurrencePattern } from '../types';
+import type { EventCategory, EventColor, OwnerId, RecurrencePattern } from '../types';
 import type { Memory, Contribution } from '../lib/photobooth';
 import type { BookTitle, BookKey, DiaryEntry } from '../lib/journal';
 
@@ -8,6 +8,7 @@ export type CalendarRow = { id: string; name: string; created_at: string; local_
 export type EventContent = {
   owner_user_id: string; owner_person_key: OwnerId; title: string; category: EventCategory;
   start_utc: string; end_utc: string; timezone: string; notes: string; open_to_study_together: boolean;
+  color?: EventColor | null;
 };
 export type EventWrite = EventContent & { id: string; calendar_id: string };
 export type EventRow = EventWrite & { created_at: string; updated_at: string };
@@ -15,6 +16,7 @@ export type RuleWrite = {
   id: string; calendar_id: string; owner_user_id: string; owner_person_key: OwnerId;
   title: string; category: EventCategory; timezone: string; local_start_time: string; local_end_time: string;
   pattern: RecurrencePattern; weekdays: number[]; enabled: boolean; notes: string; open_to_study_together: boolean;
+  start_date?: string | null; end_date?: string | null; repeat_interval?: number; color?: EventColor | null;
 };
 export type RuleRow = RuleWrite & { created_at: string; updated_at: string };
 export type ExceptionWrite = {

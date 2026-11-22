@@ -99,5 +99,68 @@ describe('existing UI with the cloud hook boundary mocked', () => {
     controls.cloud.source = EMPTY_SCHEDULE; view.rerender(<App />);
     await waitFor(() => expect(view.container.querySelector('.live-card.sarim .live-activity strong')?.textContent).toBe('Free'));
   });
+
+  it.each(['04:00', '05:00', '06:00'])('creates a one-time event at %s with the selected color', async start => {
+    controls.auth.session = { user: { id: users.deena } };
+    const save = vi.fn(async (_event: CalendarEvent, _existing: boolean) => true);
+    controls.cloud.saveEvent = save;
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '＋ New event' }));
+    expect((screen.getByLabelText('Repeat') as HTMLSelectElement).value).toBe('none');
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Early appointment' } });
+    fireEvent.change(screen.getByLabelText('Start'), { target: { value: start } });
+    fireEvent.change(screen.getByLabelText('End'), { target: { value: start.replace(':00', ':15') } });
+    fireEvent.change(screen.getByLabelText('Color'), { target: { value: 'berry' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save event ✦' }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ color: 'berry', isRecurring: false }), false));
+    const saved = save.mock.calls[0][0];
+    expect(DateTime.fromISO(saved.startUtc).setZone(saved.timezone).toFormat('HH:mm')).toBe(start);
+    expect(DateTime.fromISO(saved.endUtc).diff(DateTime.fromISO(saved.startUtc), 'minutes').minutes).toBe(15);
+    expect(controls.cloud.saveRule).not.toHaveBeenCalled();
+  });
+
+  it.each(['daily', 'weekly', 'monthly', 'yearly', 'custom'])('creates a %s series from the event editor', async pattern => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '＋ New event' }));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Recurring appointment' } });
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-08-26' } });
+    fireEvent.change(screen.getByLabelText('Repeat'), { target: { value: pattern } });
+    if (pattern === 'custom') {
+      fireEvent.change(screen.getByLabelText('Repeat every'), { target: { value: '2' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Friday' }));
+      fireEvent.change(screen.getByLabelText('Ends on (optional)'), { target: { value: '2026-09-30' } });
+    }
+    fireEvent.change(screen.getByLabelText('Color'), { target: { value: 'rose' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save event ✦' }));
+    await waitFor(() => expect(controls.cloud.saveRule).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Recurring appointment', startDate: '2026-08-26', color: 'rose', timezone: 'America/New_York',
+      ...(pattern === 'custom'
+        ? { pattern: 'weekly', interval: 2, weekdays: [3, 5], endDate: '2026-09-30' }
+        : { pattern, interval: 1 }),
+    }), false));
+    expect(controls.cloud.saveEvent).not.toHaveBeenCalled();
+  });
+
+  it('opens the series editor from an occurrence and preserves its repeat settings', async () => {
+    controls.auth.session = { user: { id: users.deena } };
+    const startDate = DateTime.utc().setZone('Asia/Kuala_Lumpur').toISODate()!;
+    controls.cloud.source = { ...EMPTY_SCHEDULE, rules: [{
+      id: 'daily-series', ownerId: 'deena', title: 'Early series', category: 'personal', timezone: 'Asia/Kuala_Lumpur',
+      startTime: '04:15', endTime: '04:30', pattern: 'daily', weekdays: [], interval: 2, startDate, active: true,
+      notes: 'Original series notes', openToStudyTogether: false, color: 'peony',
+    }] } satisfies ScheduleSource;
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /^Edit Early series,/ }));
+    expect((screen.getByLabelText('Start') as HTMLInputElement).value).toBe('04:15');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit series' }));
+    await screen.findByRole('heading', { name: 'Edit schedule' });
+    expect((screen.getByLabelText('Repeat every') as HTMLInputElement).value).toBe('2');
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Event details' })).toBeNull());
+    expect((screen.getByLabelText('Color') as HTMLSelectElement).value).toBe('peony');
+    fireEvent.click(screen.getByRole('button', { name: 'Save schedule' }));
+    await waitFor(() => expect(controls.cloud.saveRule).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'daily-series', pattern: 'daily', interval: 2, startDate, color: 'peony',
+    }), true));
+  });
 });
 

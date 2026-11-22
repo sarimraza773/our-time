@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
 import type { OwnerId } from '../types';
-import { calculateFreeSlots, calculateMutualFreeSlots, calculateStudyTogetherSlots, convertTimezone, formatRange, getEventsForDay } from './calendar';
+import { calculateFreeSlots, calculateMutualFreeSlots, calculateStudyTogetherSlots, convertTimezone, dayWindow, formatRange } from './calendar';
 import { resolveEventsForRange, type ScheduleSource } from './schedule';
 import { getCurrentScheduleStatus, getNextFreeInstant, OWNER_DETAILS } from './status';
 
@@ -41,13 +41,8 @@ function targetOwner(lower: string, currentUserId: OwnerId): OwnerId {
 }
 
 function eventsForDay(ctx: BotCalendarContext, day: DateTime) {
-  const localStart = day.setZone(ctx.timezone).startOf('day');
-  const resolved = resolveEventsForRange({
-    ...ctx,
-    rangeStart: localStart.toUTC(),
-    rangeEnd: localStart.plus({ days: 1, hours: 2 }).toUTC(),
-  });
-  return getEventsForDay(resolved, day, ctx.timezone);
+  const { start, end } = dayWindow(day, ctx.timezone);
+  return resolveEventsForRange({ ...ctx, rangeStart: start, rangeEnd: end });
 }
 
 function zonedTime(isoUtc: string, zone: string) {

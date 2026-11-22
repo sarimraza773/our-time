@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { beforeAll, beforeEach, afterAll, afterEach, describe, expect, it } from 'vitest';
 import { calendarId, event, outsider, rule, users } from '../test/calendarFixtures';
-import { eventToWrite, exceptionToWrite, ruleToWrite } from './calendarMapping';
+import { eventToWrite, exceptionToWrite, mapSnapshot, ruleToWrite } from './calendarMapping';
+import type { Snapshot } from './database';
 
 let db: PGlite;
 const asUser = async (id: string) => { await db.exec('set local role authenticated'); await db.query("select set_config('request.jwt.claim.sub', $1, true)", [id]); };
@@ -26,6 +27,7 @@ beforeAll(async () => {
     create function realtime.send(payload jsonb,event text,topic text,private boolean) returns void language sql as $$
       insert into realtime.messages(extension,topic,payload,private) values ('broadcast',topic,payload,private) $$;`);
   await db.exec(readFileSync(new URL('../../supabase/migrations/202609260001_shared_calendar.sql', import.meta.url), 'utf8'));
+  await db.exec(readFileSync(new URL('../../supabase/migrations/202611210001_event_colors_and_repeats.sql', import.meta.url), 'utf8'));
   await db.query('insert into auth.users values ($1),($2),($3)', [users.deena, users.sarim, outsider]);
   await db.query(`insert into public.profiles(id,display_name,person_key,timezone) values ($1,'Deena','deena','Asia/Kuala_Lumpur'),($2,'Sarim','sarim','America/New_York')`, [users.deena, users.sarim]);
   await db.query("insert into public.shared_calendars(id,name) values ($1,'Our Time')", [calendarId]);
@@ -82,6 +84,41 @@ describe('actual migration on local Postgres (PGlite)', () => {
     expect((await db.query('select * from public.calendar_events')).rows).toEqual([]);
     expect((await db.query('select * from public.recurring_rules')).rows).toEqual([]);
     expect((await db.query('select local_import_completed_at from public.shared_calendars')).rows).toEqual([{ local_import_completed_at: null }]);
+  });
+  it('round-trips single and recurring colors and custom repeat settings across member snapshots', async () => {
+    const colored = { ...event, color: 'shell' as const };
+    const series = { ...rule, pattern: 'monthly' as const, startDate: '2026-08-26', endDate: '2026-12-26', interval: 2, color: 'rose' as const };
+    const id = `rule:${rule.id}:2026-08-26`;
+    await asUser(users.deena);
+    await importData([eventToWrite(colored, calendarId, users)], [ruleToWrite(series, calendarId, users)],
+      [exceptionToWrite(id, { ...event, color: 'mauve' }, calendarId, users)]);
+
+    await asUser(users.sarim);
+    const snapshot = async () => mapSnapshot((await db.query<{ value: Snapshot }>('select public.load_shared_calendar() as value')).rows[0].value);
+    const saved = await snapshot();
+    expect(saved.events[0]).toMatchObject({ id: event.id, color: 'shell', startUtc: event.startUtc });
+    expect(saved.rules[0]).toMatchObject(series);
+    expect(saved.overrides[id]).toMatchObject({ color: 'mauve', recurringRuleId: rule.id });
+    await db.exec('update public.calendar_events set color=null');
+    await asUser(users.deena);
+    expect((await snapshot()).events[0].color).toBeUndefined();
+  });
+
+  it('rejects invalid colors and repeat intervals', async () => {
+    await asUser(users.deena);
+    await insertEvent();
+    const invalid = async (statement: string) => {
+      await db.exec('savepoint invalid_settings');
+      await expect(db.exec(statement)).rejects.toThrow(/check constraint/);
+      await db.exec('rollback to savepoint invalid_settings');
+    };
+    await invalid("update public.calendar_events set color='invalid'");
+    await db.query(`insert into public.recurring_rules
+      (id,calendar_id,owner_user_id,owner_person_key,title,category,timezone,local_start_time,local_end_time,pattern)
+      values ('legacy',$1,$2,'deena','Early','personal','Asia/Kuala_Lumpur','04:00','05:00','daily')`, [calendarId, users.deena]);
+    await invalid('update public.recurring_rules set repeat_interval=0');
+    await invalid("update public.recurring_rules set pattern='monthly'");
+    await invalid("update public.recurring_rules set start_date='2026-08-26',end_date='2026-08-25'");
   });
   it('denies unrelated access to the privileged import function', async () => { await asUser(outsider); await expect(importData([])).rejects.toThrow(/membership required/); });
   it('emits content-free private notifications and denies unrelated topic access', async () => {

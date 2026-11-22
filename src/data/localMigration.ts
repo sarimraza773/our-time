@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 import type { CalendarEvent, RecurringRule } from '../types';
 import type { ScheduleSource } from '../lib/schedule';
 import { parseOccurrenceId } from './calendarMapping';
+import { EVENT_COLORS } from '../lib/eventColors';
 
 type StorageReader = Pick<Storage, 'getItem'>;
 // Defer access to the storage property itself so blocked-storage getters are caught.
@@ -14,13 +15,20 @@ const categories = new Set(['class','study','sleep','friends','food','freeTime',
 const validBase = (v: CalendarEvent | RecurringRule) => v && typeof v.id === 'string' && !!v.id
   && ['deena', 'sarim'].includes(v.ownerId) && typeof v.title === 'string' && !!v.title.trim()
   && categories.has(v.category) && ['Asia/Kuala_Lumpur', 'America/New_York'].includes(v.timezone)
+  && (v.color === undefined || Object.hasOwn(EVENT_COLORS, v.color))
   && typeof v.notes === 'string' && typeof v.openToStudyTogether === 'boolean';
 const validEvent = (v: CalendarEvent) => validBase(v) && typeof v.startUtc === 'string' && typeof v.endUtc === 'string'
   && /(?:Z|[+-]\d{2}:\d{2})$/.test(v.startUtc) && /(?:Z|[+-]\d{2}:\d{2})$/.test(v.endUtc)
   && DateTime.fromISO(v.startUtc).isValid && DateTime.fromISO(v.endUtc) > DateTime.fromISO(v.startUtc);
+const validDate = (date: string) => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && DateTime.fromISO(date).isValid;
 const validRule = (v: RecurringRule) => validBase(v) && typeof v.active === 'boolean'
   && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(v.startTime) && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(v.endTime)
-  && ['daily','weekdays','weekly','custom'].includes(v.pattern) && Array.isArray(v.weekdays)
+  && (v.startDate
+    ? validDate(v.startDate) && ['daily', 'weekly', 'monthly', 'yearly'].includes(v.pattern)
+      && (!v.endDate || (validDate(v.endDate) && v.endDate >= v.startDate))
+      && Number.isInteger(v.interval ?? 1) && (v.interval ?? 1) >= 1 && (v.interval ?? 1) <= 999
+    : ['daily','weekdays','weekly','custom'].includes(v.pattern) && !v.endDate && (v.interval ?? 1) === 1)
+  && Array.isArray(v.weekdays)
   && v.weekdays.every(d => Number.isInteger(d) && d >= 1 && d <= 7);
 
 export function readLocalCalendar(storage: StorageReader): LocalCalendar {

@@ -1,83 +1,121 @@
+import { useMemo, type CSSProperties } from 'react';
 import { DateTime } from 'luxon';
 import { motion } from 'framer-motion';
 import type { CalendarEvent, TimeSlot } from '../types';
 import { convertTimezone, formatRange } from '../lib/calendar';
+import { layoutTimelineEvents, timelineScale, type TimelineSpan } from '../lib/timelineLayout';
 
-const START_HOUR = 6;
-const END_HOUR = 25;
-const HOUR_HEIGHT = 52;
+type Column = 'deena' | 'together' | 'sarim';
+type PlacedEvent = ReturnType<typeof layoutTimelineEvents>[number];
+const HOURS = Array.from({ length: 24 }, (_, hour) => DateTime.utc(2000, 1, 1, hour).toFormat('h a'));
+const SHARED_CATEGORIES = new Set(['call', 'dateNight', 'sharedTime']);
 
-function position(startUtc: string, endUtc: string, day: DateTime, zone: string) {
-  const base = day.setZone(zone).startOf('day').plus({ hours:START_HOUR });
-  const endBound = day.setZone(zone).startOf('day').plus({ hours:END_HOUR });
-  const rawStart = convertTimezone(startUtc,zone);
-  const rawEnd = convertTimezone(endUtc,zone);
-  if (rawEnd <= base || rawStart >= endBound) return { top:0, height:0 };
-  const start = DateTime.max(rawStart,base);
-  const end = DateTime.min(rawEnd,endBound);
-  return { top:start.diff(base,'minutes').minutes / 60 * HOUR_HEIGHT, height:Math.max(28,end.diff(start,'minutes').minutes / 60 * HOUR_HEIGHT) };
-}
+const percent = (fraction: number) => `${fraction * 100}%`;
+const blockPosition = ({ top, bottom }: TimelineSpan) => ({ top: percent(top), height: percent(bottom - top) });
+const density = ({ top, bottom }: TimelineSpan) => {
+  const minutes = (bottom - top) * 1440;
+  return minutes < 14.5 ? 'tiny' : minutes < 29.5 ? 'compact' : 'regular';
+};
 
 function TimezoneTooltip({ event, zone }: { event: CalendarEvent; zone: string }) {
-  const sarim = convertTimezone(event.startUtc,'America/New_York');
-  const deena = convertTimezone(event.startUtc,zone);
+  const sarim = convertTimezone(event.startUtc, 'America/New_York');
+  const deena = convertTimezone(event.startUtc, zone);
   return <span className="timezone-tooltip" role="tooltip">Sarim’s time: {sarim.toFormat('h:mm a')} {sarim.offsetNameShort}<br />Deena’s time: {deena.toFormat('h:mm a')} {deena.offsetNameShort}</span>;
 }
 
-export function TimelineEvent({ event, day, zone, onEdit, column }: { event: CalendarEvent; day:DateTime; zone:string; onEdit:(event:CalendarEvent)=>void; column:'deena'|'sarim' }) {
-  const style = position(event.startUtc,event.endUtc,day,zone);
-  const localStart = convertTimezone(event.startUtc,zone);
-  const localEnd = convertTimezone(event.endUtc,zone);
+function TimelineEvent({ placement, zone, onEdit, column }: { placement: PlacedEvent; zone: string; onEdit: (event: CalendarEvent) => void; column: Column }) {
+  const { event, lane, laneCount, fill } = placement;
+  const style = {
+    ...blockPosition(placement),
+    '--lane-start': percent(lane / laneCount),
+    '--lane-end': percent((laneCount - lane - 1) / laneCount),
+    '--event-fill': fill,
+  } as CSSProperties;
+  const localStart = convertTimezone(event.startUtc, zone);
+  const localEnd = convertTimezone(event.endUtc, zone);
+  const samePeriod = (localStart.hour < 12) === (localEnd.hour < 12);
+  const details = `${event.title}, ${formatRange(event, zone)}`;
+
   return (
-    <motion.button layout className={`timeline-event ${column} category-${event.category}`} style={style} onClick={() => onEdit(event)} whileHover={{ y:-2, scale:1.01 }} whileTap={{ scale:.98 }} aria-label={`Edit ${event.title}, ${localStart.toFormat('h:mm a')} to ${localEnd.toFormat('h:mm a')}`}>
-      <strong>{event.category === 'study' && event.openToStudyTogether ? '☑ ' : ''}{event.title}</strong>
-      <small>{localStart.toFormat('h:mm')}–{localEnd.toFormat('h:mm a')}</small>
+    <motion.button type="button" className={`timeline-event ${column} category-${event.category}${fill ? ' tinted' : ''}`}
+      data-density={density(placement)} style={style} onClick={() => onEdit(event)} whileTap={{ opacity: .8 }}
+      title={details} aria-label={`Edit ${details}`}>
+      <span className="timeline-copy">
+        <strong>{event.category === 'study' && event.openToStudyTogether ? '☑ ' : ''}{event.title}</strong>
+        <small>{localStart.toFormat(samePeriod ? 'h:mm' : 'h:mm a')}–{localEnd.toFormat('h:mm a')}</small>
+      </span>
       {event.ownerId === 'sarim' && <TimezoneTooltip event={event} zone={zone} />}
     </motion.button>
   );
 }
 
-function TogetherBlock({ slot, day, zone, study = false }: { slot:TimeSlot; day:DateTime; zone:string; study?:boolean }) {
-  const style = position(slot.startUtc,slot.endUtc,day,zone);
+function TogetherBlock({ slot, span, zone, study = false }: { slot: TimeSlot; span: TimelineSpan; zone: string; study?: boolean }) {
   return (
-    <motion.div className={`together-block ${study ? 'study-together' : ''}`} style={style} whileHover={{ scale:1.015, y:-1 }}>
-      <strong>{study ? '✓ Study Together?' : '♥ Both free'}</strong>
-      <small>{formatRange(slot,zone)}</small>
+    <motion.div className={`together-block ${study ? 'study-together' : ''}`} style={blockPosition(span)}
+      data-density={density(span)}>
+      <span className="timeline-copy">
+        <strong>{study ? '✓ Study Together?' : '♥ Both free'}</strong>
+        <small>{formatRange(slot, zone)}</small>
+      </span>
     </motion.div>
   );
 }
 
-export function DailyTimeline({ day, nowUtc, events, mutualSlots, studySlots, zone, onEdit, onAdd }: { day:DateTime; nowUtc:DateTime; events:CalendarEvent[]; mutualSlots:TimeSlot[]; studySlots:TimeSlot[]; zone:string; onEdit:(event:CalendarEvent)=>void; onAdd:()=>void }) {
-  const base = day.startOf('day').plus({hours:START_HOUR});
-  const localNow = nowUtc.setZone(zone);
-  const showNow = day.setZone(zone).hasSame(localNow,'day') && localNow >= base && localNow < day.startOf('day').plus({hours:END_HOUR});
-  const nowTop = localNow.diff(base,'minutes').minutes / 60 * HOUR_HEIGHT;
-  const visible = events.filter((e) => {
-    const p = position(e.startUtc,e.endUtc,day,zone);
-    return p.height > 0 && p.top < (END_HOUR-START_HOUR)*HOUR_HEIGHT;
+function placeEvents(events: CalendarEvent[], clip: ReturnType<typeof timelineScale>['clip']) {
+  const visible = events.flatMap(event => {
+    const span = clip(event);
+    return span ? [{ event, ...span }] : [];
   });
   const pairedIds = new Set<string>();
-  for (const a of visible.filter((e)=>e.ownerId==='deena' && ['call','dateNight','sharedTime'].includes(e.category))) {
-    const match = visible.find((b)=>b.ownerId==='sarim' && b.title===a.title && b.startUtc===a.startUtc && b.endUtc===a.endUtc);
-    if (match) { pairedIds.add(a.id); pairedIds.add(match.id); }
+  for (const { event } of visible) {
+    if (event.ownerId !== 'deena' || !SHARED_CATEGORIES.has(event.category)) continue;
+    const partner = visible.find(({ event: other }) => other.ownerId === 'sarim' && !pairedIds.has(other.id)
+      && other.title === event.title && other.startUtc === event.startUtc && other.endUtc === event.endUtc);
+    if (partner) {
+      pairedIds.add(event.id);
+      pairedIds.add(partner.event.id);
+    }
   }
+
+  const columns: Record<Column, typeof visible> = { deena: [], together: [], sarim: [] };
+  for (const item of visible) columns[pairedIds.has(item.event.id) ? 'together' : item.event.ownerId].push(item);
+  return {
+    deena: layoutTimelineEvents(columns.deena),
+    together: layoutTimelineEvents(columns.together),
+    sarim: layoutTimelineEvents(columns.sarim),
+  };
+}
+
+export function DailyTimeline({ day, nowUtc, events, mutualSlots, studySlots, zone, onEdit, onAdd }: {
+  day: DateTime; nowUtc: DateTime; events: CalendarEvent[]; mutualSlots: TimeSlot[]; studySlots: TimeSlot[];
+  zone: string; onEdit: (event: CalendarEvent) => void; onAdd: () => void;
+}) {
+  const scale = useMemo(() => timelineScale(day, zone), [day, zone]);
+  const columns = useMemo(() => placeEvents(events, scale.clip), [events, scale]);
+  const lanes = Math.max(1, ...Object.values(columns).flatMap(items => items.map(item => item.laneCount)));
+  const now = scale.fraction(nowUtc);
+  const renderEvents = (column: Column) => columns[column].map(placement =>
+    <TimelineEvent key={placement.event.id} placement={placement} zone={zone} column={column} onEdit={onEdit} />);
+  const renderSlots = (slots: TimeSlot[], study = false) => slots.flatMap(slot => {
+    const span = scale.clip(slot);
+    return span ? [<TogetherBlock key={`${slot.startUtc}-${study}`} slot={slot} span={span} zone={zone} study={study} />] : [];
+  });
+
   return (
     <section className="timeline" aria-label="Daily schedule">
-      <div className="timeline-head"><span>Time <small>MYT</small></span><span>Deena</span><span>Together</span><span>Sarim</span></div>
-      <div className="timeline-scroll">
-        <div className="timeline-canvas" style={{ height:(END_HOUR-START_HOUR)*HOUR_HEIGHT }}>
-          <div className="hour-labels">{Array.from({length:END_HOUR-START_HOUR+1},(_,i)=>base.plus({hours:i})).map((hour)=><span key={hour.toISO()}>{hour.toFormat('h a')}</span>)}</div>
-          {showNow&&<div className="now-line" style={{top:nowTop}} aria-hidden="true"><i /><span>Now</span></div>}
-          <div className="timeline-column deena-col">
-            {visible.filter((e)=>e.ownerId==='deena'&&!pairedIds.has(e.id)).map((event)=><TimelineEvent key={event.id} event={event} day={day} zone={zone} column="deena" onEdit={onEdit} />)}
-          </div>
-          <div className="timeline-column together-col">
-            {mutualSlots.filter((slot)=>DateTime.fromISO(slot.endUtc)>DateTime.fromISO(slot.startUtc)).slice(0,6).map((slot)=><TogetherBlock key={`${slot.startUtc}-mutual`} slot={slot} day={day} zone={zone} />)}
-            {studySlots.map((slot)=><TogetherBlock key={`${slot.startUtc}-study`} slot={slot} day={day} zone={zone} study />)}
-            {visible.filter((e)=>pairedIds.has(e.id)&&e.ownerId==='deena').map((event)=><TogetherBlock key={event.id} slot={event} day={day} zone={zone} />)}
-          </div>
-          <div className="timeline-column sarim-col">
-            {visible.filter((e)=>e.ownerId==='sarim'&&!pairedIds.has(e.id)).map((event)=><TimelineEvent key={event.id} event={event} day={day} zone={zone} column="sarim" onEdit={onEdit} />)}
+      <div className={`timeline-scroll${lanes >= 3 ? ' has-overlaps' : ''}`}>
+        <div className="timeline-grid" style={{ '--lane-count': lanes } as CSSProperties}>
+          <div className="timeline-head"><span>Time <small>MYT</small></span><span>Deena</span><span>Together</span><span>Sarim</span></div>
+          <div className="timeline-canvas">
+            <div className="hour-labels">{HOURS.map(hour => <span key={hour}>{hour}</span>)}</div>
+            {now >= 0 && now < 1 && <div className="now-line" style={{ top: percent(now) }} aria-hidden="true"><i /><span>Now</span></div>}
+            <div className="timeline-column deena-col">{renderEvents('deena')}</div>
+            <div className="timeline-column together-col">
+              {renderSlots(mutualSlots).slice(0, 6)}
+              {renderSlots(studySlots, true)}
+              {renderEvents('together')}
+            </div>
+            <div className="timeline-column sarim-col">{renderEvents('sarim')}</div>
           </div>
         </div>
       </div>

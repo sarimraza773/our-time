@@ -1,10 +1,21 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import type { RecurringRule } from '../types';
+import { DateTime } from 'luxon';
+import { FREQUENCIES } from './RepeatFields';
 
 const ICONS: Record<string,string> = { class:'📚', sleep:'🌙', friends:'🫂', food:'🥗', study:'☑', personal:'✦', call:'☎', dateNight:'♥', sharedTime:'♥', freeTime:'○' };
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 function subtitle(rule: RecurringRule) {
+  if (rule.startDate && rule.pattern !== 'weekdays' && rule.pattern !== 'custom') {
+    const interval = rule.interval ?? 1;
+    const date = DateTime.fromISO(rule.startDate);
+    const unit = { daily: 'days', weekly: 'weeks', monthly: 'months', yearly: 'years' }[rule.pattern];
+    const cadence = interval === 1 ? FREQUENCIES[rule.pattern] : `Every ${interval} ${unit}`;
+    const day = rule.pattern === 'weekly' ? (rule.weekdays.length ? rule.weekdays.map(value => DAYS[value - 1]).join(', ') : date.toFormat('ccc'))
+      : rule.pattern === 'monthly' ? date.toFormat('d') : rule.pattern === 'yearly' ? date.toFormat('LLL d') : '';
+    return [cadence, day, `${rule.startTime}–${rule.endTime}`].filter(Boolean).join(' · ');
+  }
   const dayText = rule.pattern === 'daily' ? 'Every day' : rule.pattern === 'weekdays' ? 'Weekdays' : rule.weekdays.map((day)=>DAYS[day-1]).join(' · ');
   return `${dayText} · ${rule.startTime}–${rule.endTime}`;
 }

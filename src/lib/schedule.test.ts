@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import { describe, expect, it } from 'vitest';
 import type { CalendarEvent, RecurringRule } from '../types';
-import { resolveEventsForRange } from './schedule';
+import { createRecurringInstances, resolveEventsForRange } from './schedule';
 
 const rule: RecurringRule = {
   id: 'lecture', ownerId: 'deena', title: 'Psychology Lecture', category: 'class',
@@ -52,5 +52,48 @@ describe('resolveEventsForRange', () => {
     const moved = { ...oneTime(instanceId), ownerId: 'deena' as const, category: 'class' as const, startUtc: '2026-08-26T15:00:00.000Z', endUtc: '2026-08-26T16:00:00.000Z', isRecurring: true };
     const result = resolveEventsForRange({ events: [], rules: [], overrides: { [instanceId]: moved }, hiddenInstanceIds: [], ...range });
     expect(result.map((event) => event.id)).toEqual([instanceId]);
+  });
+});
+
+describe('date-based repeat schedules', () => {
+  function instances(changes: Partial<RecurringRule>, from: string, to: string) {
+    const zoned = (date: string) => DateTime.fromISO(date, { zone: rule.timezone });
+    return createRecurringInstances([{ ...rule, weekdays: [], startDate: '2026-08-26', ...changes }], zoned(from), zoned(to));
+  }
+  const dates = (events: CalendarEvent[]) => events.map(event => event.id.slice(-10));
+
+  it.each([
+    ['daily', ['2026-08-26', '2026-08-27', '2026-08-28', '2026-08-29', '2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02']],
+    ['weekly', ['2026-08-26', '2026-09-02']],
+  ] as const)('anchors %s to the selected start date', (pattern, expected) => {
+    expect(dates(instances({ pattern }, '2026-08-24', '2026-09-03'))).toEqual(expected);
+  });
+
+  it('uses the original monthly date after a shorter month', () => {
+    expect(dates(instances({ pattern: 'monthly', startDate: '2026-01-31' }, '2026-01-01', '2026-04-01')))
+      .toEqual(['2026-01-31', '2026-03-31']);
+  });
+
+  it('repeats annually on the selected month and day', () => {
+    expect(dates(instances({ pattern: 'yearly', startDate: '2024-02-29' }, '2025-01-01', '2029-01-01')))
+      .toEqual(['2028-02-29']);
+  });
+
+  it('supports multiple weekdays in alternate weeks with an inclusive end date', () => {
+    expect(dates(instances({ pattern: 'weekly', weekdays: [1, 3, 5], interval: 2, endDate: '2026-09-09' }, '2026-08-24', '2026-10-01')))
+      .toEqual(['2026-08-26', '2026-08-28', '2026-09-07', '2026-09-09']);
+  });
+
+  it('supports custom daily, monthly and yearly intervals', () => {
+    expect(dates(instances({ pattern: 'daily', interval: 3 }, '2026-08-25', '2026-09-01'))).toEqual(['2026-08-26', '2026-08-29']);
+    expect(dates(instances({ pattern: 'monthly', interval: 2 }, '2026-08-25', '2027-01-01'))).toEqual(['2026-08-26', '2026-10-26', '2026-12-26']);
+    expect(dates(instances({ pattern: 'yearly', interval: 2 }, '2026-08-25', '2029-01-01'))).toEqual(['2026-08-26', '2028-08-26']);
+  });
+
+  it('includes the last overnight occurrence on the following day and keeps its color', () => {
+    const occurrences = instances({ pattern: 'daily', endDate: '2026-08-26', startTime: '23:45', endTime: '00:30', color: 'peony' },
+      '2026-08-27', '2026-08-28');
+    expect(dates(occurrences)).toEqual(['2026-08-26']);
+    expect(occurrences[0]).toMatchObject({ color: 'peony', startUtc: '2026-08-26T15:45:00.000Z', endUtc: '2026-08-26T16:30:00.000Z' });
   });
 });

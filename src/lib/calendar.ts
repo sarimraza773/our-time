@@ -6,18 +6,16 @@ const BUSY_CATEGORIES = new Set(['class','study','sleep','friends','food','perso
 
 export const convertTimezone = (isoUtc: string, timezone: string) => DateTime.fromISO(isoUtc, { zone: 'utc' }).setZone(timezone);
 
-export function dayWindow(day: DateTime, zone: string, startHour = 6, endHour = 25) {
+export function dayWindow(day: DateTime, zone: string) {
   const local = day.setZone(zone).startOf('day');
   return {
-    start: local.plus({ hours: startHour }).toUTC(),
-    end: local.plus({ hours: endHour }).toUTC(),
+    start: local.toUTC(),
+    end: local.plus({ days: 1 }).toUTC(),
   };
 }
 
 export function getEventsForDay(events: CalendarEvent[], day: DateTime, timezone: string): CalendarEvent[] {
-  const localStart = day.setZone(timezone).startOf('day');
-  const start = localStart.toUTC();
-  const end = localStart.plus({ days: 1, hours: 2 }).toUTC();
+  const { start, end } = dayWindow(day, timezone);
   return events.filter((event) => DateTime.fromISO(event.endUtc) > start && DateTime.fromISO(event.startUtc) < end);
 }
 

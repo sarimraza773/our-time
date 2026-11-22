@@ -3,7 +3,7 @@ import { DateTime } from 'luxon';
 import { AnimatePresence } from 'framer-motion';
 import type { CalendarEvent, OwnerId, RecurringRule } from './types';
 import { DEENA_TIMEZONE } from './data/people';
-import { calculateMutualFreeSlots, calculateStudyTogetherSlots, getEventsForDay } from './lib/calendar';
+import { calculateMutualFreeSlots, calculateStudyTogetherSlots, dayWindow } from './lib/calendar';
 import { resolveEventsForRange } from './lib/schedule';
 import { getCurrentScheduleStatus } from './lib/status';
 import { answerCalendarQuestion } from './lib/bot';
@@ -65,10 +65,10 @@ function SharedPlanner({ authenticatedUserId, onSignOut, authError }: { authenti
   }, [cloud.saving, photobooth, diary]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 2600); return () => clearTimeout(timer); }, [toast]);
 
-  const resolvedEvents = useMemo(() => resolveEventsForRange({ ...scheduleSource,
-    rangeStart: day.minus({ days: 1 }).startOf('day'), rangeEnd: day.plus({ days: 2 }).endOf('day'),
-  }), [scheduleSource, day]);
-  const dayEvents = useMemo(() => getEventsForDay(resolvedEvents, day, DEENA_TIMEZONE), [resolvedEvents, day]);
+  const dayEvents = useMemo(() => {
+    const { start, end } = dayWindow(day, DEENA_TIMEZONE);
+    return resolveEventsForRange({ ...scheduleSource, rangeStart: start, rangeEnd: end });
+  }, [scheduleSource, day]);
   const mutualSlots = useMemo(() => calculateMutualFreeSlots(dayEvents, day, DEENA_TIMEZONE, 45), [dayEvents, day]);
   const studySlots = useMemo(() => calculateStudyTogetherSlots(dayEvents), [dayEvents]);
   const deenaStatus = useMemo(() => getCurrentScheduleStatus({ ...scheduleSource, ownerId: 'deena', nowUtc }), [scheduleSource, nowUtc]);
@@ -90,6 +90,10 @@ function SharedPlanner({ authenticatedUserId, onSignOut, authError }: { authenti
   const saveRule = async (rule: RecurringRule) => {
     if (await cloud.saveRule(rule, !!ruleEditor.rule)) { setRuleEditor({ open: false }); setToast('Recurring rhythm saved ✦'); }
   };
+  const createRuleFromEvent = async (rule: RecurringRule) => {
+    if (await cloud.saveRule(rule, false)) { setEventEditor({ open: false }); setToast('Recurring rhythm saved ✦'); }
+  };
+  const eventSeries = rules.find(rule => rule.id === eventEditor.event?.recurringRuleId);
   if (cloud.loading) return <OpeningCalendar />;
   if (!cloud.snapshot) return <PaperPage><p className="cloud-error" role="alert">{cloud.error || 'The shared calendar is not available yet.'}</p>
     {authError && <p role="alert">{authError}</p>}<button className="paper-button" onClick={cloud.retry}>Retry</button> <button className="paper-button" onClick={onSignOut}>Sign Out</button></PaperPage>;
@@ -114,7 +118,10 @@ function SharedPlanner({ authenticatedUserId, onSignOut, authError }: { authenti
       {cloud.error && <p className="cloud-error" role="alert">{cloud.error}</p>}
       <div className="import-actions"><button className="paper-button primary" disabled={cloud.saving} onClick={() => { void cloud.importLocal(); }}>{cloud.saving ? 'Importing…' : 'Import'}</button><button className="paper-button" disabled={cloud.saving} onClick={cloud.startFresh}>Start Fresh</button><button className="paper-button" disabled={cloud.saving} onClick={cloud.cancelImport}>Cancel</button></div>
     </section></div>}
-    <AnimatePresence>{eventEditor.open && <EventEditor event={eventEditor.event} day={day} ownerId={person} zone={person === 'deena' ? DEENA_TIMEZONE : 'America/New_York'} pending={cloud.saving} error={cloud.error} onSave={saveEvent} onDelete={deleteEvent} onClose={() => { if (!cloud.saving) setEventEditor({ open: false }); }} />}</AnimatePresence>
+    <AnimatePresence>{eventEditor.open && <EventEditor event={eventEditor.event} day={day} ownerId={person} zone={person === 'deena' ? DEENA_TIMEZONE : 'America/New_York'}
+      pending={cloud.saving} error={cloud.error} onSave={saveEvent} onSaveRule={createRuleFromEvent} onDelete={deleteEvent}
+      onEditSeries={eventSeries ? () => { cloud.clearError(); setEventEditor({ open: false }); setRuleEditor({ open: true, rule: eventSeries }); } : undefined}
+      onClose={() => { if (!cloud.saving) setEventEditor({ open: false }); }} />}</AnimatePresence>
     <AnimatePresence>{ruleEditor.open && <RecurringScheduleEditor rule={ruleEditor.rule} ownerId={person} pending={cloud.saving} error={cloud.error} onSave={saveRule} onClose={() => { if (!cloud.saving) setRuleEditor({ open: false }); }} />}</AnimatePresence>
     </div>
     {photobooth && memoryRepository && <Photobooth repository={memoryRepository} calendarId={cloud.snapshot.calendar.id} userId={authenticatedUserId} person={person} onClose={closePhotobooth} />}
