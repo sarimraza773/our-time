@@ -72,6 +72,13 @@ describe('private cycle journal interactions with simulated persistence', () => 
     await screen.findByText('Saved to Deena’s tracker.');
     expect(repository.saveEntry).toHaveBeenCalledWith('synthetic-owner',expect.anything(),expect.anything(),undefined);
   });
+  it('clears a prediction confirmation draft when all tracker data is deleted', async () => {
+    const {show}=fixture({entries:[],settings:null,predictions:[{id:'p1',user_id:'synthetic-owner',anchor_start:'2026-02-01',start_date:'2026-03-01',end_date:'2026-03-05',status:'predicted',confirmed_entry_id:null,updated_at:'v1'}]});
+    show();await screen.findByRole('button',{name:'Confirm / correct bleeding dates'});
+    fireEvent.click(screen.getByRole('button',{name:'Confirm / correct bleeding dates'}));expect(screen.getByLabelText('Actual period start')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Delete all tracker data'}));fireEvent.click(screen.getByRole('button',{name:'Confirm deletion'}));
+    await waitFor(()=>expect(screen.queryByLabelText('Actual period start')).toBeNull());
+  });
   it('clears data when access is denied on refresh and offers a retry for connection errors', async () => {
     const {show,repository}=fixture(); show(); await screen.findByRole('button',{name:'Cycle settings'});
     vi.mocked(repository.load).mockRejectedValueOnce(new CycleAccessError('Private access denied'));
